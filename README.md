@@ -6,6 +6,12 @@ Designed for the workflow of running Claude Code CLI in an external terminal alo
 
 ---
 
+## Demo
+
+![claude-preview.nvim demo](docs/claude-preview.gif)
+
+---
+
 ## How it works
 
 ```

@@ -1,0 +1,5 @@
+# macOS
+.DS_Store
+
+# Claude Code local settings (user-specific, contains absolute paths)
+.claude/settings.local.json

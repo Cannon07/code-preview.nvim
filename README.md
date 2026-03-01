@@ -8,7 +8,7 @@ Designed for the workflow of running Claude Code CLI in an external terminal alo
 
 ## Demo
 
-![claude-preview.nvim demo](docs/claude-preview.gif)
+![claude-preview.nvim demo](docs/claude-preview-demo.gif)
 
 ---
 
@@ -51,7 +51,7 @@ No Python dependency — file transformations use `nvim --headless -l`.
 
 ```lua
 {
-  "jayshitre/claude-preview.nvim",
+  "Cannon07/claude-preview.nvim",
   config = function()
     require("claude-preview").setup()
   end,

@@ -9,16 +9,16 @@ Designed for the workflow of running Claude Code CLI in an external terminal alo
 ## How it works
 
 ```
-Claude CLI (terminal)               Neovim
-        │                                  │
-   Proposes an Edit                        │
-        │                                  │
+Claude CLI (terminal)                                Neovim
+        │                                              │
+   Proposes an Edit                                    │
+        │                                              │
    PreToolUse hook fires ──→ hook script ──→ RPC → show_diff()
-        │                                  │      (new tab, side-by-side)
-   CLI: "Accept? (y/n)"                   │
-        │                         User reviews diff
-   User accepts/rejects                    │
-        │                                  │
+        │                                              │ (new tab, side-by-side)
+   CLI: "Accept? (y/n)"                                │
+        │                                       User reviews diff
+   User accepts/rejects                                │
+        │                                              │
    PostToolUse hook fires ─→ hook script ──→ RPC → close_diff()
 ```
 

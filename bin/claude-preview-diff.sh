@@ -13,8 +13,8 @@ INPUT="$(cat)"
 TOOL_NAME="$(echo "$INPUT" | jq -r '.tool_name')"
 CWD="$(echo "$INPUT" | jq -r '.cwd')"
 
-# Discover Neovim socket and load RPC helpers
-source "$SCRIPT_DIR/nvim-socket.sh" 2>/dev/null
+# Discover Neovim socket (prefer instance whose cwd matches project) and load RPC helpers
+source "$SCRIPT_DIR/nvim-socket.sh" "$CWD" 2>/dev/null || true
 source "$SCRIPT_DIR/nvim-send.sh"
 
 HAS_NVIM=true

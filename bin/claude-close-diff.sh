@@ -4,11 +4,12 @@
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
-# Read stdin (PostToolUse sends JSON but we don't need it)
-cat > /dev/null
+# Read stdin and extract cwd for socket discovery
+INPUT="$(cat)"
+CWD="$(echo "$INPUT" | jq -r '.cwd // empty' 2>/dev/null || true)"
 
-# Discover Neovim socket and load RPC helpers
-source "$SCRIPT_DIR/nvim-socket.sh" 2>/dev/null
+# Discover Neovim socket (prefer instance whose cwd matches project) and load RPC helpers
+source "$SCRIPT_DIR/nvim-socket.sh" "$CWD" 2>/dev/null
 source "$SCRIPT_DIR/nvim-send.sh"
 
 # Close the diff tab in Neovim (silently skip if no socket)

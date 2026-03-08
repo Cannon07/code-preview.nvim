@@ -69,6 +69,60 @@ case "$TOOL_NAME" in
     nvim --headless -l "$SCRIPT_DIR/apply-multi-edit.lua" "$INPUT" "$PROP_FILE"
     ;;
 
+  Bash)
+    COMMAND="$(echo "$INPUT" | jq -r '.tool_input.command')"
+
+    # Detect rm commands: split on command separators and check each sub-command
+    detect_rm_paths() {
+      local cmd="$1"
+      # Trim leading whitespace
+      cmd="$(echo "$cmd" | sed 's/^[[:space:]]*//')"
+      # Match: optional sudo, then rm as standalone command, then flags/paths
+      if echo "$cmd" | grep -qE '^(sudo[[:space:]]+)?rm[[:space:]]'; then
+        # Strip rm command and known flags, leaving paths
+        echo "$cmd" | sed -E 's/^(sudo[[:space:]]+)?rm[[:space:]]+//' \
+                     | tr ' ' '\n' \
+                     | grep -vE '^-' \
+                     | while read -r p; do
+                         if [[ -z "$p" ]]; then continue; fi
+                         # Resolve relative paths against CWD
+                         if [[ "$p" != /* ]]; then
+                           echo "$CWD/$p"
+                         else
+                           echo "$p"
+                         fi
+                       done
+      fi
+    }
+
+    # Split command on && || ; and check each part
+    RM_PATHS=""
+    while IFS= read -r subcmd; do
+      while IFS= read -r path; do
+        [[ -n "$path" ]] && RM_PATHS="$RM_PATHS $path"
+      done < <(detect_rm_paths "$subcmd")
+    done < <(echo "$COMMAND" | sed 's/[;&|]\{1,2\}/\n/g')
+
+    RM_PATHS="$(echo "$RM_PATHS" | xargs)"
+    if [[ -z "$RM_PATHS" ]]; then
+      exit 0  # Not an rm command, pass through
+    fi
+
+    # Mark each path as deleted in neo-tree
+    if [[ "$HAS_NVIM" == "true" ]]; then
+      for path in $RM_PATHS; do
+        PATH_ESC="$(escape_lua "$path")"
+        nvim_send "require('claude-preview.changes').set('$PATH_ESC', 'deleted')"
+      done
+      nvim_send "pcall(function() require('claude-preview.neo_tree').refresh() end)"
+      # Reveal the first deleted file in the tree
+      FIRST_PATH="$(echo "$RM_PATHS" | awk '{print $1}')"
+      FIRST_ESC="$(escape_lua "$FIRST_PATH")"
+      nvim_send "vim.defer_fn(function() pcall(function() require('claude-preview.neo_tree').reveal('$FIRST_ESC') end) end, 300)"
+    fi
+    exit 0
+    ;;
+
   *)
     exit 0
     ;;

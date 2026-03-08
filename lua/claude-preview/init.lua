@@ -18,10 +18,12 @@ local default_config = {
     symbols = {
       modified = "󰏫",
       created  = "󰎔",
+      deleted  = "󰆴",
     },
     highlights = {
       modified = { fg = "#e8a838", bold = true },
       created  = { fg = "#56c8d8", bold = true },
+      deleted  = { fg = "#e06c75", bold = true, strikethrough = true },
     },
   },
   highlights = {

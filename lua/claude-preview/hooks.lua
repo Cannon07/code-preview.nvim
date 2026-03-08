@@ -71,11 +71,11 @@ function M.install()
 
   -- Add our entries
   table.insert(data.hooks.PreToolUse, {
-    matcher = "Edit|Write|MultiEdit",
+    matcher = "Edit|Write|MultiEdit|Bash",
     hooks   = { { type = "command", command = preview } },
   })
   table.insert(data.hooks.PostToolUse, {
-    matcher = "Edit|Write|MultiEdit",
+    matcher = "Edit|Write|MultiEdit|Bash",
     hooks   = { { type = "command", command = close } },
   })
 

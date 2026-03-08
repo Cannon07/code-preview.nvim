@@ -41,6 +41,24 @@ local function update_component_visibility(state, has_pending)
   end
 end
 
+-- Resolve a node's effective status, checking ancestors for directory deletions
+local function resolve_status(lookup, node_path)
+  if not node_path then
+    return nil
+  end
+  local status = lookup[node_path]
+  if status then
+    return status
+  end
+  -- Check if any ancestor directory is marked as deleted
+  for path, s in pairs(lookup) do
+    if s == "deleted" and vim.startswith(node_path, path .. "/") then
+      return "deleted"
+    end
+  end
+  return nil
+end
+
 -- Wrap the name component to color-code changed files
 local function wrap_name_component(state)
   if not state.components.name or state.components._claude_name_wrapped then
@@ -52,11 +70,13 @@ local function wrap_name_component(state)
     local result = original_name(config, node, s)
     if type(result) == "table" then
       local lookup = s.claude_status_lookup or {}
-      local status = lookup[node.path]
+      local status = resolve_status(lookup, node.path)
       if node._claude_virtual or status == "created" then
         result.highlight = "ClaudePreviewTreeVirtual"
       elseif status == "modified" then
         result.highlight = "ClaudePreviewTreeModified"
+      elseif status == "deleted" then
+        result.highlight = "ClaudePreviewTreeDeleted"
       end
     end
     return result
@@ -101,7 +121,7 @@ local function inject_status_component(state, symbols)
   end
   state.components.claude_status = function(config, node, s)
     local lookup = s.claude_status_lookup or {}
-    local status = lookup[node.path]
+    local status = resolve_status(lookup, node.path)
     if node._claude_virtual or status == "created" then
       return {
         text = (symbols.created or "") .. " ",
@@ -111,6 +131,11 @@ local function inject_status_component(state, symbols)
       return {
         text = (symbols.modified or "󰏫") .. " ",
         highlight = "ClaudePreviewTreeModified",
+      }
+    elseif status == "deleted" then
+      return {
+        text = (symbols.deleted or "󰆴") .. " ",
+        highlight = "ClaudePreviewTreeDeleted",
       }
     end
     return {}
@@ -262,6 +287,7 @@ function M.setup(cfg)
   -- Define highlight groups from config
   define_hl("ClaudePreviewTreeModified", highlights.modified)
   define_hl("ClaudePreviewTreeCreated", highlights.created)
+  define_hl("ClaudePreviewTreeDeleted", highlights.deleted)
   define_hl("ClaudePreviewTreeVirtual", highlights.created, { italic = true })
 
   -- Subscribe to BEFORE_RENDER to inject our lookup and components

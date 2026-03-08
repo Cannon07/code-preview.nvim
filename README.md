@@ -129,6 +129,51 @@ require("claude-preview").setup({
 
 ---
 
+## Neo-tree Integration (Optional)
+
+If you use [neo-tree.nvim](https://github.com/nvim-neo-tree/neo-tree.nvim), claude-preview will automatically decorate your file tree with visual indicators when Claude proposes changes. No extra configuration is required — it works out of the box.
+
+### What you get
+
+| Status | Icon | Name Color | Description |
+|--------|------|------------|-------------|
+| Modified | 󰏫 | Orange | Claude is editing an existing file |
+| Created | 󰎔 | Cyan + italic | Claude is creating a new file (shown as a virtual node) |
+| Deleted | 󰆴 | Red + strikethrough | Claude is deleting a file via `rm` |
+
+Additional behaviors:
+- **Auto-reveal** — the tree expands to highlight the changed file
+- **Virtual nodes** — new files/directories appear in the tree before they exist on disk
+- **Clean focus** — git status, diagnostics, and modified indicators are temporarily hidden while changes are pending
+- **Auto-cleanup** — all indicators clear when you accept, reject, or press `<leader>dq`
+
+### Neo-tree configuration options
+
+All neo-tree options with defaults:
+
+```lua
+require("claude-preview").setup({
+  neo_tree = {
+    enabled = true,             -- set false to disable neo-tree integration
+    position = "right",         -- neo-tree window position: "left", "right", "float"
+    symbols = {
+      modified = "󰏫",
+      created  = "󰎔",
+      deleted  = "󰆴",
+    },
+    highlights = {
+      modified = { fg = "#e8a838", bold = true },
+      created  = { fg = "#56c8d8", bold = true },
+      deleted  = { fg = "#e06c75", bold = true, strikethrough = true },
+    },
+  },
+})
+```
+
+> **Note:** Neo-tree is a soft dependency. If neo-tree is not installed, the plugin works exactly as before — only the diff preview.
+
+---
+
 ## Architecture
 
 ```
@@ -137,6 +182,8 @@ claude-preview.nvim/
 │   ├── init.lua        setup(), config, commands
 │   ├── diff.lua        show_diff(), close_diff()
 │   ├── hooks.lua       install/uninstall .claude/settings.local.json
+│   ├── changes.lua     change status registry (modified/created/deleted)
+│   ├── neo_tree.lua    neo-tree integration (icons, virtual nodes, reveal)
 │   └── health.lua      :checkhealth
 └── bin/
     ├── claude-preview-diff.sh   PreToolUse hook entry point

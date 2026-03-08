@@ -133,6 +133,8 @@ require("claude-preview").setup({
 
 If you use [neo-tree.nvim](https://github.com/nvim-neo-tree/neo-tree.nvim), claude-preview will automatically decorate your file tree with visual indicators when Claude proposes changes. No extra configuration is required — it works out of the box.
 
+![neo-tree integration demo](docs/claude-preview-neotree-integration.gif)
+
 ### What you get
 
 | Status | Icon | Name Color | Description |

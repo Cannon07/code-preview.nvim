@@ -11,6 +11,19 @@ local default_config = {
     equalize = true,
     full_file = true,
   },
+  neo_tree = {
+    enabled = true,
+    refresh_on_change = true,
+    position = "right",
+    symbols = {
+      modified = "󰏫",
+      created  = "󰎔",
+    },
+    highlights = {
+      modified = { fg = "#e8a838", bold = true },
+      created  = { fg = "#56c8d8", bold = true },
+    },
+  },
   highlights = {
     current = {
       DiffAdd    = { bg = "#4c2e2e" },
@@ -51,15 +64,20 @@ function M.setup(user_config)
   end, { desc = "Uninstall claude-preview hooks" })
 
   vim.api.nvim_create_user_command("ClaudePreviewCloseDiff", function()
-    require("claude-preview.diff").close_diff()
+    require("claude-preview.diff").close_diff_and_clear()
   end, { desc = "Manually close claude-preview diff (use after rejecting a change)" })
 
   vim.api.nvim_create_user_command("ClaudePreviewStatus", function()
     M.status()
   end, { desc = "Show claude-preview status" })
 
+  -- Neo-tree integration (soft dependency)
+  if M.config.neo_tree.enabled then
+    require("claude-preview.neo_tree").setup(M.config)
+  end
+
   vim.keymap.set("n", "<leader>dq", function()
-    require("claude-preview.diff").close_diff()
+    require("claude-preview.diff").close_diff_and_clear()
   end, { desc = "Close claude-preview diff" })
 end
 

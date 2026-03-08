@@ -82,6 +82,36 @@ if [[ "$HAS_NVIM" == "true" ]]; then
   ORIG_ESC="$(escape_lua "$ORIG_FILE")"
   PROP_ESC="$(escape_lua "$PROP_FILE")"
   DISPLAY_ESC="$(escape_lua "$DISPLAY_NAME")"
+  FILE_PATH_ESC="$(escape_lua "$FILE_PATH")"
+
+  # Determine change status for neo-tree indicator
+  # Check if the actual file exists on disk (not the temp copy, which is always created)
+  if [[ -f "$FILE_PATH" ]]; then
+    CHANGE_STATUS="modified"
+  else
+    CHANGE_STATUS="created"
+  fi
+
+  nvim_send "require('claude-preview.changes').set('$FILE_PATH_ESC', '$CHANGE_STATUS')"
+  nvim_send "pcall(function() require('claude-preview.neo_tree').refresh() end)"
+  # Reveal the file in neo-tree: for modified files reveal the file itself,
+  # for created files reveal the nearest existing parent directory
+  if [[ "$CHANGE_STATUS" == "modified" ]]; then
+    nvim_send "vim.defer_fn(function() pcall(function() require('claude-preview.neo_tree').reveal('$FILE_PATH_ESC') end) end, 300)"
+  else
+    # Walk up to find the nearest existing parent directory
+    REVEAL_DIR="$(dirname "$FILE_PATH")"
+    while [[ ! -d "$REVEAL_DIR" && "$REVEAL_DIR" != "/" ]]; do
+      REVEAL_DIR="$(dirname "$REVEAL_DIR")"
+    done
+    # Reveal a file inside the parent dir to force neo-tree to expand it
+    REVEAL_TARGET="$(find "$REVEAL_DIR" -maxdepth 1 -type f | head -1)"
+    if [[ -z "$REVEAL_TARGET" ]]; then
+      REVEAL_TARGET="$REVEAL_DIR"
+    fi
+    REVEAL_TARGET_ESC="$(escape_lua "$REVEAL_TARGET")"
+    nvim_send "vim.defer_fn(function() pcall(function() require('claude-preview.neo_tree').reveal('$REVEAL_TARGET_ESC') end) end, 300)"
+  fi
   nvim_send "require('claude-preview.diff').show_diff('$ORIG_ESC', '$PROP_ESC', '$DISPLAY_ESC')"
 fi
 

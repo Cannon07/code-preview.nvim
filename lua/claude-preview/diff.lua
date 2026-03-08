@@ -61,7 +61,6 @@ function M.show_diff(original_path, proposed_path, real_file_path)
   -- Left side: CURRENT (original file content)
   local orig_buf = vim.api.nvim_get_current_buf()
   vim.api.nvim_buf_set_lines(orig_buf, 0, -1, false, read_file_lines(original_path))
-  vim.api.nvim_buf_set_name(orig_buf, "[" .. labels.current .. "] " .. display_name)
   vim.bo[orig_buf].buftype    = "nofile"
   vim.bo[orig_buf].bufhidden  = "wipe"
   vim.bo[orig_buf].swapfile   = false
@@ -78,7 +77,6 @@ function M.show_diff(original_path, proposed_path, real_file_path)
   local prop_buf = vim.api.nvim_create_buf(false, true)
   vim.api.nvim_win_set_buf(0, prop_buf)
   vim.api.nvim_buf_set_lines(prop_buf, 0, -1, false, read_file_lines(proposed_path))
-  vim.api.nvim_buf_set_name(prop_buf, "[" .. labels.proposed .. "] " .. display_name)
   vim.bo[prop_buf].buftype    = "nofile"
   vim.bo[prop_buf].bufhidden  = "wipe"
   vim.bo[prop_buf].swapfile   = false
@@ -149,6 +147,13 @@ function M.close_diff()
 
   diff_tab  = nil
   diff_bufs = {}
+end
+
+-- Close diff AND clear neo-tree indicators (for manual close via <leader>dq)
+function M.close_diff_and_clear()
+  M.close_diff()
+  pcall(function() require("claude-preview.changes").clear_all() end)
+  pcall(function() require("claude-preview.neo_tree").refresh() end)
 end
 
 return M

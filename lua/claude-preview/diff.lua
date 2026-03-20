@@ -127,6 +127,14 @@ end
 function M.close_diff()
   if diff_tab and vim.api.nvim_tabpage_is_valid(diff_tab) then
     local wins = vim.api.nvim_tabpage_list_wins(diff_tab)
+    -- Turn off diff mode first to avoid triggering DiffUpdated autocmds
+    -- during window close (works around Neovim crash in win_findbuf when
+    -- w_buffer is NULL during frame recalculation)
+    for _, win in ipairs(wins) do
+      if vim.api.nvim_win_is_valid(win) then
+        pcall(vim.api.nvim_win_call, win, function() vim.cmd('diffoff') end)
+      end
+    end
     for _, win in ipairs(wins) do
       if vim.api.nvim_win_is_valid(win) then
         pcall(vim.api.nvim_win_close, win, true)

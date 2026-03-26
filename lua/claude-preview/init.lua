@@ -5,7 +5,7 @@ M.config = {}
 
 local default_config = {
   diff = {
-    layout = "tab",        -- "tab" or "vsplit"
+    layout = "tab",        -- "tab", "vsplit", or "inline"
     labels = { current = "CURRENT", proposed = "PROPOSED" },
     auto_close = true,
     equalize = true,
@@ -38,6 +38,12 @@ local default_config = {
       DiffDelete = { bg = "#4c2e2e" },
       DiffChange = { bg = "#2e3c4c" },
       DiffText   = { bg = "#3e5c3e" },
+    },
+    inline = {
+      added        = { bg = "#2e4c2e" },
+      removed      = { bg = "#4c2e2e" },
+      added_text   = { bg = "#3a6e3a" },
+      removed_text = { bg = "#6e3a3a" },
     },
   },
 }

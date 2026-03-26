@@ -1,6 +1,6 @@
 # claude-preview.nvim
 
-A Neovim plugin that shows a **side-by-side diff before Claude Code applies any file change** — letting you review exactly what's changing before accepting.
+A Neovim plugin that shows a **diff preview before Claude Code applies any file change** — letting you review exactly what's changing before accepting
 
 Designed for the workflow of running Claude Code CLI in an external terminal alongside Neovim.
 
@@ -31,7 +31,7 @@ Claude CLI (terminal)                                Neovim
 Three mechanisms:
 1. **Claude Code Hooks** — `PreToolUse` intercepts edits, `PostToolUse` cleans up
 2. **Neovim RPC** — hook scripts send Lua commands via `nvim --server <socket> --remote-send`
-3. **Neovim diff mode** — native side-by-side diff in a dedicated tab
+3. **Neovim diff mode** — native side-by-side diff in a dedicated tab, or GitHub-style inline diff
 
 ---
 
@@ -86,24 +86,30 @@ All options with defaults:
 ```lua
 require("claude-preview").setup({
   diff = {
-    layout   = "tab",    -- "tab" (new tab) | "vsplit" (current tab)
+    layout   = "tab",    -- "tab" (new tab) | "vsplit" (current tab) | "inline" (GitHub-style)
     labels   = { current = "CURRENT", proposed = "PROPOSED" },
     auto_close = true,   -- close diff after accept
-    equalize   = true,   -- 50/50 split widths
-    full_file  = true,   -- show full file, not just diff hunks
+    equalize   = true,   -- 50/50 split widths (tab/vsplit only)
+    full_file  = true,   -- show full file, not just diff hunks (tab/vsplit only)
   },
   highlights = {
-    current = {          -- CURRENT (original) side
+    current = {          -- CURRENT (original) side — tab/vsplit layouts
       DiffAdd    = { bg = "#4c2e2e" },
       DiffDelete = { bg = "#4c2e2e" },
       DiffChange = { bg = "#4c3a2e" },
       DiffText   = { bg = "#5c3030" },
     },
-    proposed = {         -- PROPOSED side
+    proposed = {         -- PROPOSED side — tab/vsplit layouts
       DiffAdd    = { bg = "#2e4c2e" },
       DiffDelete = { bg = "#4c2e2e" },
       DiffChange = { bg = "#2e3c4c" },
       DiffText   = { bg = "#3e5c3e" },
+    },
+    inline = {           -- inline layout
+      added        = { bg = "#2e4c2e" },          -- added line background
+      removed      = { bg = "#4c2e2e" },          -- removed line background
+      added_text   = { bg = "#3a6e3a" },          -- changed characters (added)
+      removed_text = { bg = "#6e3a3a" },          -- changed characters (removed)
     },
   },
 })
@@ -126,6 +132,33 @@ require("claude-preview").setup({
 | Key | Description |
 |-----|-------------|
 | `<leader>dq` | Close the diff tab (same as `:ClaudePreviewCloseDiff`) |
+
+---
+
+## Diff Layouts
+
+claude-preview supports three diff layouts, configured via `diff.layout`:
+
+| Layout | Description |
+|--------|-------------|
+| `"tab"` (default) | Side-by-side diff in a new tab — CURRENT on the left, PROPOSED on the right |
+| `"vsplit"` | Side-by-side diff as a vertical split in the current tab |
+| `"inline"` | GitHub-style unified diff in a single buffer with syntax highlighting preserved |
+
+### Inline diff features
+
+- **Syntax highlighting** — the file's language highlighting is preserved
+- **Character-level diffs** — changed portions within a line are highlighted with a brighter background
+- **Sign column** — `+`/`-` signs indicate added/removed lines
+- **Navigation** — `]c` / `[c` to jump between changes
+
+To use inline diff:
+
+```lua
+require("claude-preview").setup({
+  diff = { layout = "inline" },
+})
+```
 
 ---
 

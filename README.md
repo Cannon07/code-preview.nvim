@@ -29,6 +29,7 @@ Claude CLI (terminal)                                Neovim
 ```
 
 Three mechanisms:
+
 1. **Claude Code Hooks** — `PreToolUse` intercepts edits, `PostToolUse` cleans up
 2. **Neovim RPC** — hook scripts send Lua commands via `nvim --server <socket> --remote-send`
 3. **Neovim diff mode** — native side-by-side diff in a dedicated tab, or GitHub-style inline diff
@@ -177,6 +178,7 @@ If you use [neo-tree.nvim](https://github.com/nvim-neo-tree/neo-tree.nvim), clau
 | Deleted | 󰆴 | Red + strikethrough | Claude is deleting a file via `rm` |
 
 Additional behaviors:
+
 - **Auto-reveal** — the tree expands to highlight the changed file
 - **Virtual nodes** — new files/directories appear in the tree before they exist on disk
 - **Clean focus** — git status, diagnostics, and modified indicators are temporarily hidden while changes are pending
@@ -238,24 +240,32 @@ For buffers to auto-reload after Claude writes a file, add this to your Neovim c
 ```lua
 vim.o.autoread = true
 vim.api.nvim_create_autocmd({ "FocusGained", "BufEnter", "CursorHold" }, {
-  command = "checktime",
+ callback = function()
+  if vim.fn.getcmdwintype() == "" then
+   vim.cmd("checktime")
+  end
+ end,
 })
 ```
+
 ---
 
 ## Troubleshooting
 
 **Diff doesn't open**
+
 - Run `:ClaudePreviewStatus` — check that `Neovim socket` is found
 - Ensure `jq` is in PATH
 - Restart Claude Code after installing hooks (hooks are read at startup)
 
 **Hooks not firing**
+
 - Run `:ClaudePreviewInstallHooks` in the project root
 - Verify `.claude/settings.local.json` contains the hook entries
 - Restart the Claude CLI
 
 **Diff doesn't close after rejecting**
+
 - Press `<leader>dq` or run `:ClaudePreviewCloseDiff` — PostToolUse only fires on accept
 
 ---

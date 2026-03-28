@@ -110,4 +110,64 @@ function M.uninstall()
   vim.notify("[claude-preview] Hooks removed from " .. path, vim.log.levels.INFO)
 end
 
+-- ── OpenCode plugin management ──────────────────────────────────
+
+local function plugin_source_dir()
+  local src = debug.getinfo(1, "S").source
+  local lua_file = src:sub(2)
+  local lua_dir  = vim.fn.fnamemodify(lua_file, ":h")
+  return vim.fn.fnamemodify(lua_dir, ":h:h") .. "/opencode-plugin"
+end
+
+local function opencode_target_dir()
+  return vim.fn.getcwd() .. "/.opencode/plugins"
+end
+
+function M.install_opencode()
+  local source = plugin_source_dir()
+  local index_src = source .. "/index.ts"
+
+  if vim.fn.filereadable(index_src) == 0 then
+    vim.notify("[claude-preview] OpenCode plugin source not found: " .. index_src, vim.log.levels.ERROR)
+    return
+  end
+
+  local target = opencode_target_dir()
+  vim.fn.mkdir(target, "p")
+
+  -- Copy plugin files
+  local files = { "index.ts", "nvim.ts", "edits.ts", "package.json", "tsconfig.json" }
+  for _, file in ipairs(files) do
+    local src_path = source .. "/" .. file
+    local dst_path = target .. "/" .. file
+    if vim.fn.filereadable(src_path) == 1 then
+      vim.fn.system({ "cp", src_path, dst_path })
+    end
+  end
+
+  vim.notify("[claude-preview] OpenCode plugin installed → " .. target, vim.log.levels.INFO)
+end
+
+function M.uninstall_opencode()
+  local target = opencode_target_dir()
+
+  local files = { "index.ts", "nvim.ts", "edits.ts", "package.json", "tsconfig.json" }
+  local removed = false
+  for _, file in ipairs(files) do
+    local path = target .. "/" .. file
+    if vim.fn.filereadable(path) == 1 then
+      vim.fn.delete(path)
+      removed = true
+    end
+  end
+
+  if removed then
+    -- Remove plugins/ directory only if empty (don't touch other .opencode files)
+    vim.fn.delete(target, "d")
+    vim.notify("[claude-preview] OpenCode plugin removed", vim.log.levels.INFO)
+  else
+    vim.notify("[claude-preview] No OpenCode plugin found in " .. target, vim.log.levels.WARN)
+  end
+end
+
 return M

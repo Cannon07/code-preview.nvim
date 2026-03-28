@@ -71,6 +71,14 @@ function M.setup(user_config)
     require("claude-preview.hooks").uninstall()
   end, { desc = "Uninstall claude-preview hooks" })
 
+  vim.api.nvim_create_user_command("CodePreviewInstallOpenCodeHooks", function()
+    require("claude-preview.hooks").install_opencode()
+  end, { desc = "Install claude-preview plugin for OpenCode" })
+
+  vim.api.nvim_create_user_command("CodePreviewUninstallOpenCodeHooks", function()
+    require("claude-preview.hooks").uninstall_opencode()
+  end, { desc = "Uninstall claude-preview plugin from OpenCode" })
+
   vim.api.nvim_create_user_command("ClaudePreviewCloseDiff", function()
     require("claude-preview.diff").close_diff_and_clear()
   end, { desc = "Manually close claude-preview diff (use after rejecting a change)" })

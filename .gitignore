@@ -3,3 +3,6 @@
 
 # Claude Code local settings (user-specific, contains absolute paths)
 .claude/settings.local.json
+
+# OpenCode local plugins (installed by :CodePreviewInstallOpenCodeHooks)
+.opencode/

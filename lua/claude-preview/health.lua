@@ -8,19 +8,35 @@ function M.check()
   local error = h.error or h.report_error
   local start = h.start or h.report_start
 
+  -- ── Common ────────────────────────────────────────────────────
+
   start("claude-preview.nvim")
 
-  -- 1. jq
+  -- Neovim RPC socket (required for both backends)
+  local socket = vim.v.servername or ""
+  if socket ~= "" then
+    ok("Neovim RPC socket: " .. socket)
+  else
+    warn("Neovim RPC socket not found (start Neovim with --listen or set NVIM_LISTEN_ADDRESS)")
+  end
+
+  -- Diff layout
+  local cfg = require("claude-preview").config or {}
+  local layout = (cfg.diff and cfg.diff.layout) or "unknown"
+  ok("Diff layout: " .. layout)
+
+  -- ── Claude Code backend ───────────────────────────────────────
+
+  start("Claude Code backend")
+
+  -- jq (required by Claude Code shell hooks)
   if vim.fn.executable("jq") == 1 then
     ok("jq is available")
   else
-    error("jq not found in PATH (required by hook scripts)")
+    warn("jq not found in PATH (required by Claude Code hook scripts)")
   end
 
-  -- 2. nvim (always true — we're inside nvim)
-  ok("nvim is available")
-
-  -- 3. Hook scripts executable
+  -- Hook scripts executable
   local src = debug.getinfo(1, "S").source
   local lua_file = src:sub(2)
   local lua_dir  = vim.fn.fnamemodify(lua_file, ":h")
@@ -44,7 +60,7 @@ function M.check()
     end
   end
 
-  -- 4. .claude/settings.local.json
+  -- .claude/settings.local.json
   local settings = vim.fn.getcwd() .. "/.claude/settings.local.json"
   local f = io.open(settings, "r")
   if not f then
@@ -67,19 +83,30 @@ function M.check()
         end
       end
       if found then
-        ok("claude-preview hooks are installed in .claude/settings.local.json")
+        ok("Claude Code hooks are installed")
       else
-        warn("claude-preview hooks not found in .claude/settings.local.json — run :ClaudePreviewInstallHooks")
+        warn("claude-preview hooks not found — run :ClaudePreviewInstallHooks")
       end
     end
   end
 
-  -- 5. Neovim RPC socket
-  local socket = vim.v.servername or ""
-  if socket ~= "" then
-    ok("Neovim RPC socket: " .. socket)
+  -- ── OpenCode backend ──────────────────────────────────────────
+
+  start("OpenCode backend")
+
+  -- OpenCode CLI
+  if vim.fn.executable("opencode") == 1 then
+    ok("opencode is available in PATH")
   else
-    warn("Neovim RPC socket not found (start Neovim with --listen or set NVIM_LISTEN_ADDRESS)")
+    warn("opencode not found in PATH (install from https://opencode.ai)")
+  end
+
+  -- OpenCode plugin installed
+  local opencode_plugin = vim.fn.getcwd() .. "/.opencode/plugins/index.ts"
+  if vim.fn.filereadable(opencode_plugin) == 1 then
+    ok("OpenCode plugin is installed (.opencode/plugins/)")
+  else
+    warn("OpenCode plugin not installed — run :CodePreviewInstallOpenCodeHooks")
   end
 end
 

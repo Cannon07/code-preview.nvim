@@ -8,7 +8,28 @@ Supports [Claude Code](https://docs.anthropic.com/en/docs/claude-code) and [Open
 
 ## Demo
 
-![claude-preview.nvim demo](docs/claude-preview-demo.gif)
+### Claude Code
+![Claude Code demo](docs/claude-preview-demo.gif)
+
+### OpenCode
+![OpenCode demo](docs/claude-preview-opencode.gif)
+
+---
+
+## Table of Contents
+
+- [Features](#features)
+- [Requirements](#requirements)
+- [Installation](#installation)
+- [Quick Start](#quick-start)
+  - [Claude Code](#claude-code)
+  - [OpenCode](#opencode)
+- [How it works](#how-it-works)
+- [Configuration](#configuration)
+- [Commands](#commands)
+- [Diff Layouts](#diff-layouts)
+- [Neo-tree Integration](#neo-tree-integration-optional)
+- [Troubleshooting](#troubleshooting)
 
 ---
 

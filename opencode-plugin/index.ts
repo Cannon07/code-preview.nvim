@@ -35,7 +35,6 @@ const plugin: Plugin = async ({ directory }) => {
     "tool.execute.before": async (input, output) => {
       const { tool } = input
       const args = output.args as Record<string, any>
-
       // ── Bash (rm detection) ───────────────────────────────
       if (tool === "bash") {
         const command: string = args.command ?? ""
@@ -80,9 +79,16 @@ const plugin: Plugin = async ({ directory }) => {
       let original: string
       let proposed: string
 
+      // Resolve filePath — the hook fires with raw LLM args which may
+      // contain a relative path.  The tool itself resolves it inside
+      // execute(), but that happens *after* the hook, so we must do it
+      // here too.
+      const resolveFilePath = (p: string) =>
+        p && !p.startsWith("/") ? resolve(projectCwd, p) : p
+
       switch (tool) {
         case "edit": {
-          filePath = args.filePath
+          filePath = resolveFilePath(args.filePath)
           original = readFileOrEmpty(filePath)
           proposed = applyEdit(
             original,
@@ -94,14 +100,14 @@ const plugin: Plugin = async ({ directory }) => {
         }
 
         case "write": {
-          filePath = args.filePath
+          filePath = resolveFilePath(args.filePath)
           original = readFileOrEmpty(filePath)
           proposed = args.content ?? ""
           break
         }
 
         case "multiedit": {
-          filePath = args.filePath
+          filePath = resolveFilePath(args.filePath)
           original = readFileOrEmpty(filePath)
           proposed = applyMultiEdit(original, args.edits ?? [])
           break
@@ -140,47 +146,40 @@ const plugin: Plugin = async ({ directory }) => {
       const displayEsc = escapeLua(displayName)
       const filePathEsc = escapeLua(filePath)
 
-      // Set neo-tree change indicator
-      nvimSend(socket, `require('claude-preview.changes').set('${filePathEsc}', '${changeStatus}')`)
-      nvimSend(socket, "pcall(function() require('claude-preview.neo_tree').refresh() end)")
+      // Send all commands in a single pcall-wrapped block to avoid
+      // one error blocking subsequent commands via --remote-send
+      const revealCmd = changeStatus === "modified"
+        ? `vim.defer_fn(function() pcall(function() require('claude-preview.neo_tree').reveal('${filePathEsc}') end) end, 300)`
+        : (() => {
+            let revealDir = dirname(filePath)
+            while (!existsSync(revealDir) && revealDir !== "/") {
+              revealDir = dirname(revealDir)
+            }
+            return `vim.defer_fn(function() pcall(function() require('claude-preview.neo_tree').reveal('${escapeLua(revealDir)}') end) end, 300)`
+          })()
 
-      // Reveal in neo-tree
-      if (changeStatus === "modified") {
-        nvimSend(
-          socket,
-          `vim.defer_fn(function() pcall(function() require('claude-preview.neo_tree').reveal('${filePathEsc}') end) end, 300)`,
-        )
-      } else {
-        let revealDir = dirname(filePath)
-        while (!existsSync(revealDir) && revealDir !== "/") {
-          revealDir = dirname(revealDir)
-        }
-        nvimSend(
-          socket,
-          `vim.defer_fn(function() pcall(function() require('claude-preview.neo_tree').reveal('${escapeLua(revealDir)}') end) end, 300)`,
-        )
-      }
+      const luaBlock = [
+        `pcall(function() require('claude-preview.changes').set('${filePathEsc}', '${changeStatus}') end)`,
+        `pcall(function() require('claude-preview.neo_tree').refresh() end)`,
+        `pcall(function() ${revealCmd} end)`,
+        `local ok, err = pcall(function() require('claude-preview.diff').show_diff('${origEsc}', '${propEsc}', '${displayEsc}') end)`,
+        `if not ok then vim.notify('claude-preview show_diff error: ' .. tostring(err), vim.log.levels.ERROR) end`,
+      ].join(" ")
 
-      // Show diff
-      nvimSend(
-        socket,
-        `require('claude-preview.diff').show_diff('${origEsc}', '${propEsc}', '${displayEsc}')`,
-      )
+      nvimSend(socket, luaBlock)
     },
 
     "tool.execute.after": async (input, _output) => {
       const { tool } = input
-
       // For bash (rm detection), only clear deletion markers
       if (tool === "bash") {
         const socket = findNvimSocket(projectCwd)
         if (!socket) return
 
-        nvimSend(socket, "require('claude-preview.changes').clear_by_status('deleted')")
-        nvimSend(
-          socket,
+        nvimSend(socket, [
+          "pcall(function() require('claude-preview.changes').clear_by_status('deleted') end)",
           "vim.defer_fn(function() pcall(function() require('claude-preview.neo_tree').refresh() end) end, 200)",
-        )
+        ].join(" "))
         return
       }
 
@@ -190,25 +189,27 @@ const plugin: Plugin = async ({ directory }) => {
       if (!socket) return
 
       const args = input.args as Record<string, any>
-      const filePath: string | undefined = args?.filePath
+      const rawPath: string | undefined = args?.filePath
+      const filePath = rawPath && !rawPath.startsWith("/") ? resolve(projectCwd, rawPath) : rawPath
 
-      // Clear indicators and close diff
-      nvimSend(socket, "require('claude-preview.changes').clear_all()")
-      nvimSend(socket, "require('claude-preview.diff').close_diff()")
+      // Send all cleanup commands in a single batch
+      const luaLines = [
+        "pcall(function() require('claude-preview.changes').clear_all() end)",
+        "pcall(function() require('claude-preview.diff').close_diff() end)",
+      ]
 
-      // Deferred refresh + reveal
       if (filePath) {
         const filePathEsc = escapeLua(filePath)
-        nvimSend(
-          socket,
+        luaLines.push(
           `vim.defer_fn(function() pcall(function() require('claude-preview.neo_tree').refresh() end) vim.defer_fn(function() pcall(function() require('claude-preview.neo_tree').reveal('${filePathEsc}') end) end, 200) end, 200)`,
         )
       } else {
-        nvimSend(
-          socket,
+        luaLines.push(
           "vim.defer_fn(function() pcall(function() require('claude-preview.neo_tree').refresh() end) end, 200)",
         )
       }
+
+      nvimSend(socket, luaLines.join(" "))
 
       cleanupTempFiles()
     },

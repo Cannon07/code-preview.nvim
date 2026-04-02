@@ -114,17 +114,25 @@ export function findNvimSocket(projectCwd: string): string | null {
 
   if (liveSockets.length === 0) return null
 
-  // 3. Prefer socket whose Neovim cwd matches project
+  // Helper: get socket creation time (newer = more recent Neovim instance)
+  const socketMtime = (s: string): number => {
+    try { return statSync(s).ctimeMs } catch { return 0 }
+  }
+
+  // 3. Prefer socket whose Neovim cwd matches project (newest by ctime)
   if (projectCwd) {
-    for (const { pid, socket } of liveSockets) {
+    const matches = liveSockets.filter(({ pid }) => {
       const nvimCwd = getPidCwd(pid)
-      if (nvimCwd && (projectCwd === nvimCwd || projectCwd.startsWith(nvimCwd + "/"))) {
-        return socket
-      }
+      return nvimCwd && (projectCwd === nvimCwd || projectCwd.startsWith(nvimCwd + "/"))
+    })
+    if (matches.length > 0) {
+      matches.sort((a, b) => socketMtime(b.socket) - socketMtime(a.socket))
+      return matches[0].socket
     }
   }
 
-  // 4. Fallback to first live socket
+  // 4. Fallback to newest live socket
+  liveSockets.sort((a, b) => socketMtime(b.socket) - socketMtime(a.socket))
   return liveSockets[0].socket
 }
 
@@ -133,15 +141,26 @@ export function escapeLua(str: string): string {
   return str.replace(/\\/g, "\\\\").replace(/'/g, "\\'")
 }
 
-/** Send a Lua command to Neovim via --remote-send. */
+/**
+ * Send a Lua command to Neovim.
+ * Writes to a temp file and uses `:luafile` to avoid command-line length
+ * limits with --remote-send.
+ */
 export function nvimSend(socket: string, luaCmd: string): boolean {
+  const { writeFileSync } = require("fs") as typeof import("fs")
+  const tmpLua = `/tmp/claude-preview-nvim-cmd-${process.pid}-${Date.now()}.lua`
   try {
+    writeFileSync(tmpLua, luaCmd)
+    // Use --remote-expr with execute() so the call is synchronous —
+    // Neovim runs the luafile and returns before we delete the temp file.
     execSync(
-      `nvim --server "${socket}" --remote-send ":lua ${luaCmd}<CR>"`,
-      { timeout: 5000, stdio: "ignore" },
+      `nvim --server "${socket}" --remote-expr "execute('luafile ${tmpLua}')"`,
+      { timeout: 5000, stdio: "pipe" },
     )
     return true
   } catch {
     return false
+  } finally {
+    try { const { unlinkSync } = require("fs"); unlinkSync(tmpLua) } catch {}
   }
 }

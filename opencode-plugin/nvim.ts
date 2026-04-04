@@ -3,7 +3,7 @@
 // Finds running Neovim instances by scanning known socket locations
 // (macOS, Linux, XDG_RUNTIME_DIR) and sends Lua commands via RPC.
 
-import { existsSync, statSync } from "fs"
+import { existsSync, statSync, writeFileSync, unlinkSync } from "fs"
 import { dirname, basename } from "path"
 import { execSync } from "child_process"
 import { platform } from "os"
@@ -147,7 +147,6 @@ export function escapeLua(str: string): string {
  * limits with --remote-send.
  */
 export function nvimSend(socket: string, luaCmd: string): boolean {
-  const { writeFileSync } = require("fs") as typeof import("fs")
   const tmpLua = `/tmp/claude-preview-nvim-cmd-${process.pid}-${Date.now()}.lua`
   try {
     writeFileSync(tmpLua, luaCmd)
@@ -161,6 +160,6 @@ export function nvimSend(socket: string, luaCmd: string): boolean {
   } catch {
     return false
   } finally {
-    try { const { unlinkSync } = require("fs"); unlinkSync(tmpLua) } catch {}
+    try { unlinkSync(tmpLua) } catch {}
   }
 }

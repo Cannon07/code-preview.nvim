@@ -1,0 +1,52 @@
+name: E2E Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+      fail-fast: false
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Neovim
+        uses: rhysd/action-setup-vim@v1
+        with:
+          neovim: true
+          version: v0.10.4
+
+      - name: Install jq
+        if: runner.os == 'Linux'
+        run: sudo apt-get install -y jq
+
+      - name: Install bun (for OpenCode tests)
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install plenary.nvim (test dependency)
+        run: |
+          mkdir -p deps
+          git clone --depth 1 https://github.com/nvim-lua/plenary.nvim deps/plenary.nvim
+
+      - name: Verify dependencies
+        run: |
+          nvim --version | head -3
+          jq --version
+          bun --version
+
+      - name: Run E2E tests
+        run: |
+          chmod +x tests/run.sh tests/run_lua.sh tests/helpers.sh
+          chmod +x bin/*.sh
+          ./tests/run.sh

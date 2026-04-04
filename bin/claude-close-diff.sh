@@ -20,17 +20,12 @@ if [[ "$TOOL_NAME" == "Bash" ]]; then
   exit 0
 fi
 
-# Extract file path for post-close reveal
-FILE_PATH="$(echo "$INPUT" | jq -r '.tool_input.file_path // empty' 2>/dev/null || true)"
+# Only clean up if a diff was actually open
+DIFF_OPEN=$(nvim --server "$NVIM_SOCKET" --remote-expr "luaeval(\"require('claude-preview.diff').is_open()\")" 2>/dev/null || echo "false")
 
-# Clear neo-tree change indicators and close the diff tab
-nvim_send "require('claude-preview.changes').clear_all()" || true
-nvim_send "require('claude-preview.diff').close_diff()" || true
-# Deferred refresh + reveal so neo-tree picks up changes after Claude writes them to disk
-if [[ -n "$FILE_PATH" ]]; then
-  FILE_PATH_ESC="$(escape_lua "$FILE_PATH")"
-  nvim_send "vim.defer_fn(function() pcall(function() require('claude-preview.neo_tree').refresh() end) vim.defer_fn(function() pcall(function() require('claude-preview.neo_tree').reveal('$FILE_PATH_ESC') end) end, 200) end, 200)" || true
-else
+if [[ "$DIFF_OPEN" == "true" ]]; then
+  nvim_send "require('claude-preview.changes').clear_all()" || true
+  nvim_send "require('claude-preview.diff').close_diff()" || true
   nvim_send "vim.defer_fn(function() pcall(function() require('claude-preview.neo_tree').refresh() end) end, 200)" || true
 fi
 

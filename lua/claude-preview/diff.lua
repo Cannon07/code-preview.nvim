@@ -279,7 +279,7 @@ local function show_inline_diff(original_path, proposed_path, real_file_path, cf
   vim.wo[win].winbar = "%#DiagnosticInfo# INLINE DIFF %* " .. display_name
   vim.wo[win].number = false
   vim.wo[win].relativenumber = false
-  vim.wo[win].wrap = false
+  vim.wo[win].wrap = true
   vim.wo[win].cursorline = true
   vim.wo[win].signcolumn = "no"
   vim.wo[win].statuscolumn = "%!v:lua.require('claude-preview.diff').inline_statuscolumn(" .. col_width .. ")"

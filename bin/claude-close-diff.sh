@@ -23,6 +23,12 @@ fi
 # Extract file path for post-close reveal
 FILE_PATH="$(echo "$INPUT" | jq -r '.tool_input.file_path // empty' 2>/dev/null || true)"
 
+# Reload nvim buffer Claude edited to display changes without refocus, other open buffers not affected
+if [[ -n "$FILE_PATH" ]]; then
+  FILE_PATH_ESC="$(escape_lua "$FILE_PATH")"
+  nvim_send "local buf = vim.fn.bufnr('$FILE_PATH_ESC'); if buf ~= -1 then vim.api.nvim_buf_call(buf, function() vim.cmd('checktime') end) end" || true
+fi
+
 # Only clean up if a diff was actually open
 DIFF_OPEN=$(nvim --server "$NVIM_SOCKET" --remote-expr "luaeval(\"require('claude-preview.diff').is_open()\")" 2>/dev/null || echo "false")
 

@@ -121,19 +121,19 @@ function M.hook_context(file_path)
 
   local file_visible = false
   if visible_only and file_path ~= "" then
-    -- Resolve to canonical path; use case-insensitive compare on macOS
-    local is_mac = vim.fn.has("mac") == 1
+    -- fs_realpath returns the filesystem's canonical form, so case-insensitive
+    -- volumes (e.g. default APFS) normalize automatically without per-OS logic.
     local target = vim.uv.fs_realpath(file_path) or vim.fn.fnamemodify(file_path, ":p")
-    if is_mac then target = target:lower() end
 
     for _, w in ipairs(vim.api.nvim_list_wins()) do
       local b = vim.api.nvim_win_get_buf(w)
-      local name = vim.uv.fs_realpath(vim.api.nvim_buf_get_name(b))
-              or vim.fn.fnamemodify(vim.api.nvim_buf_get_name(b), ":p")
-      if is_mac then name = name:lower() end
-      if name == target then
-        file_visible = true
-        break
+      local raw = vim.api.nvim_buf_get_name(b)
+      if raw ~= "" then
+        local name = vim.uv.fs_realpath(raw) or vim.fn.fnamemodify(raw, ":p")
+        if name == target then
+          file_visible = true
+          break
+        end
       end
     end
   end

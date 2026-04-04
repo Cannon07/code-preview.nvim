@@ -23,10 +23,13 @@ fi
 # Extract file path for post-close reveal
 FILE_PATH="$(echo "$INPUT" | jq -r '.tool_input.file_path // empty' 2>/dev/null || true)"
 
-# Reload nvim buffer Claude edited to display changes without refocus, other open buffers not affected
+# Reload nvim buffer Claude edited to display changes without refocus, other open buffers not affected.
+# Iterate nvim_list_bufs() with canonical-path comparison instead of vim.fn.bufnr(path),
+# which does partial+regex matching on buffer names and mis-matches paths with regex
+# metacharacters (e.g. /tmp/foo[1].md).
 if [[ -n "$FILE_PATH" ]]; then
   FILE_PATH_ESC="$(escape_lua "$FILE_PATH")"
-  nvim_send "local buf = vim.fn.bufnr('$FILE_PATH_ESC'); if buf ~= -1 then vim.api.nvim_buf_call(buf, function() vim.cmd('checktime') end) end" || true
+  nvim_send "local target = vim.uv.fs_realpath('$FILE_PATH_ESC') or vim.fn.fnamemodify('$FILE_PATH_ESC', ':p') for _, b in ipairs(vim.api.nvim_list_bufs()) do local n = vim.api.nvim_buf_get_name(b) if n ~= '' then local name = vim.uv.fs_realpath(n) or vim.fn.fnamemodify(n, ':p') if name == target then vim.api.nvim_buf_call(b, function() vim.cmd('checktime ' .. b) end) break end end end" || true
 fi
 
 # Only clean up if a diff was actually open
@@ -35,7 +38,11 @@ DIFF_OPEN=$(nvim --server "$NVIM_SOCKET" --remote-expr "luaeval(\"require('claud
 if [[ "$DIFF_OPEN" == "true" ]]; then
   nvim_send "require('claude-preview.changes').clear_all()" || true
   nvim_send "require('claude-preview.diff').close_diff()" || true
-  nvim_send "vim.defer_fn(function() pcall(function() require('claude-preview.neo_tree').refresh() end) end, 200)" || true
+  if [[ -n "$FILE_PATH" ]]; then
+    nvim_send "vim.defer_fn(function() pcall(function() require('claude-preview.neo_tree').refresh() end) vim.defer_fn(function() pcall(function() require('claude-preview.neo_tree').reveal('$FILE_PATH_ESC') end) end, 200) end, 200)" || true
+  else
+    nvim_send "vim.defer_fn(function() pcall(function() require('claude-preview.neo_tree').refresh() end) end, 200)" || true
+  fi
 fi
 
 # Clean up temp files

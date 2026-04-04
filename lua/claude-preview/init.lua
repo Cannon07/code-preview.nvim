@@ -13,6 +13,9 @@ local default_config = {
   },
   neo_tree = {
     enabled = true,
+    -- reveal = false disables scroll-to-file in the tree. Change indicators
+    -- (modified/created/deleted icons) still appear — to disable those too,
+    -- set neo_tree.enabled = false.
     reveal = true,         -- reveal edited files in neo-tree
     reveal_root = "cwd",   -- "cwd" (default) or "git" (nearest git root)
     refresh_on_change = true,

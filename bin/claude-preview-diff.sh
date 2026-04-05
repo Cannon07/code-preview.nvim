@@ -203,12 +203,6 @@ if [[ "$HAS_NVIM" == "true" ]]; then
   fi
 fi
 
-# --- Always ask for user confirmation ---
-
-if [[ "$HAS_NVIM" == "true" ]]; then
-  REASON="Diff preview sent to Neovim. Review before accepting."
-else
-  REASON="Neovim not running. Review the diff in CLI before accepting."
-fi
-
-printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask","permissionDecisionReason":"%s"}}\n' "$REASON"
+# No permissionDecision output — Claude Code's own permission settings
+# (bypass, ask, allowlist) are the authority on whether to prompt.
+# This hook only controls the Neovim UI layer.

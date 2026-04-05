@@ -34,8 +34,8 @@ EOF
   local output
   output="$(run_pretool_hook "$payload")"
 
-  # Hook should return JSON with "ask" decision
-  assert_contains "$output" '"permissionDecision":"ask"' "PreToolUse should return ask decision" || return 1
+  # Hook should produce no output (defers to Claude Code's permission settings)
+  assert_eq "" "$output" "PreToolUse should produce no output" || return 1
 
   # Give Neovim a moment to process the RPC
   sleep 0.5
@@ -91,7 +91,7 @@ EOF
 
   local output
   output="$(run_pretool_hook "$payload")"
-  assert_contains "$output" '"permissionDecision":"ask"' || return 1
+  assert_eq "" "$output" || return 1
 
   sleep 0.5
 
@@ -134,7 +134,7 @@ EOF
 
   local output
   output="$(run_pretool_hook "$payload")"
-  assert_contains "$output" '"permissionDecision":"ask"' || return 1
+  assert_eq "" "$output" || return 1
 
   sleep 0.5
 

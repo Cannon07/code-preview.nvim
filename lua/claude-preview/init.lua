@@ -10,6 +10,7 @@ local default_config = {
     auto_close = true,
     equalize = true,
     full_file = true,
+    visible_only = false,  -- only show diffs for files open in a visible nvim window
   },
   neo_tree = {
     enabled = true,
@@ -92,6 +93,15 @@ function M.setup(user_config)
     M.status()
   end, { desc = "Show claude-preview status" })
 
+  vim.api.nvim_create_user_command("ClaudePreviewToggleVisibleOnly", function()
+    M.config.diff.visible_only = not M.config.diff.visible_only
+    vim.notify(
+      "claude-preview: visible_only = " .. tostring(M.config.diff.visible_only),
+      vim.log.levels.INFO,
+      { title = "claude-preview" }
+    )
+  end, { desc = "Toggle visible_only — show diffs only for open buffers vs all files" })
+
   -- Neo-tree integration (soft dependency)
   if M.config.neo_tree.enabled then
     require("claude-preview.neo_tree").setup(M.config)
@@ -103,17 +113,38 @@ function M.setup(user_config)
 end
 
 --- Query hook context for the PreToolUse shell script.
---- Returns a JSON string with config values in a single RPC call.
+--- Returns a JSON string with config + file visibility in a single RPC call.
 --- @param file_path string absolute path of the file being edited
---- @return string JSON: { neo_tree_reveal, reveal_root }
+--- @return string JSON: { neo_tree_reveal, reveal_root, visible_only, file_visible }
 function M.hook_context(file_path)
   local cfg = M.config
   local neo_tree_reveal = (cfg.neo_tree.enabled and cfg.neo_tree.reveal) and true or false
   local reveal_root = cfg.neo_tree.reveal_root or "cwd"
+  local visible_only = cfg.diff.visible_only and true or false
+
+  local file_visible = false
+  if visible_only and file_path ~= "" then
+    -- fs_realpath returns the filesystem's canonical form, so case-insensitive
+    -- volumes (e.g. default APFS) normalize automatically without per-OS logic.
+    local target = vim.uv.fs_realpath(file_path) or vim.fn.fnamemodify(file_path, ":p")
+    for _, w in ipairs(vim.api.nvim_list_wins()) do
+      local b = vim.api.nvim_win_get_buf(w)
+      local raw = vim.api.nvim_buf_get_name(b)
+      if raw ~= "" then
+        local name = vim.uv.fs_realpath(raw) or vim.fn.fnamemodify(raw, ":p")
+        if name == target then
+          file_visible = true
+          break
+        end
+      end
+    end
+  end
 
   return vim.json.encode({
     neo_tree_reveal = neo_tree_reveal,
     reveal_root = reveal_root,
+    visible_only = visible_only,
+    file_visible = file_visible,
   })
 end
 

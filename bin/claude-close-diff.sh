@@ -38,11 +38,7 @@ DIFF_OPEN=$(nvim --server "$NVIM_SOCKET" --remote-expr "luaeval(\"require('claud
 if [[ "$DIFF_OPEN" == "true" ]]; then
   nvim_send "require('claude-preview.changes').clear_all()" || true
   nvim_send "require('claude-preview.diff').close_diff()" || true
-  if [[ -n "$FILE_PATH" ]]; then
-    nvim_send "vim.defer_fn(function() pcall(function() require('claude-preview.neo_tree').refresh() end) vim.defer_fn(function() pcall(function() require('claude-preview.neo_tree').reveal('$FILE_PATH_ESC') end) end, 200) end, 200)" || true
-  else
-    nvim_send "vim.defer_fn(function() pcall(function() require('claude-preview.neo_tree').refresh() end) end, 200)" || true
-  fi
+  nvim_send "vim.defer_fn(function() pcall(function() require('claude-preview.neo_tree').refresh() end) end, 200)" || true
 fi
 
 # Clean up temp files

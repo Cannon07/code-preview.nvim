@@ -32,14 +32,8 @@ if [[ -n "$FILE_PATH" ]]; then
   nvim_send "local target = vim.uv.fs_realpath('$FILE_PATH_ESC') or vim.fn.fnamemodify('$FILE_PATH_ESC', ':p') for _, b in ipairs(vim.api.nvim_list_bufs()) do local n = vim.api.nvim_buf_get_name(b) if n ~= '' then local name = vim.uv.fs_realpath(n) or vim.fn.fnamemodify(n, ':p') if name == target then vim.api.nvim_buf_call(b, function() vim.cmd('checktime ' .. b) end) break end end end" || true
 fi
 
-# Only clean up if a diff was actually open
-DIFF_OPEN=$(nvim --server "$NVIM_SOCKET" --remote-expr "luaeval(\"require('claude-preview.diff').is_open()\")" 2>/dev/null || echo "false")
-
-if [[ "$DIFF_OPEN" == "true" ]]; then
-  nvim_send "require('claude-preview.changes').clear_all()" || true
-  nvim_send "require('claude-preview.diff').close_diff()" || true
-  nvim_send "vim.defer_fn(function() pcall(function() require('claude-preview.neo_tree').refresh() end) end, 200)" || true
-fi
+# Clean up diff if one was open — single RPC call instead of remote-expr check + 3 separate sends
+nvim_send "if require('claude-preview.diff').is_open() then pcall(function() require('claude-preview.changes').clear_all() end) pcall(function() require('claude-preview.diff').close_diff() end) vim.defer_fn(function() pcall(function() require('claude-preview.neo_tree').refresh() end) end, 200) end" || true
 
 # Clean up temp files
 rm -f "${TMPDIR:-/tmp}/claude-diff-original" "${TMPDIR:-/tmp}/claude-diff-proposed"

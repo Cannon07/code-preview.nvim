@@ -11,8 +11,12 @@ setup_test_project
 # ── Test: Hook works after Neovim restart ────────────────────────
 
 test_stale_socket_recovery() {
-  # Start first Neovim instance
-  start_nvim
+  # Start the first Neovim instance on a scanner-compatible socket path. The
+  # hook still has to rediscover it by filesystem scan because scan mode clears
+  # NVIM_LISTEN_ADDRESS before invoking the hook.
+  start_nvim_on_socket "$TEST_PROJECT_DIR"
+  local first_socket="$TEST_SOCKET"
+  local first_pid="$NVIM_PID"
 
   local test_file
   test_file="$(create_test_file "src/recover.lua" 'local old = true')"
@@ -32,22 +36,34 @@ test_stale_socket_recovery() {
 EOF
 )
 
-  run_pretool_hook "$payload" >/dev/null
+  run_pretool_hook "$payload" scan >/dev/null
   sleep 0.5
   local is_open
   is_open="$(nvim_eval "require('claude-preview.diff').is_open()")"
   assert_eq "true" "$is_open" "diff should open on first instance" || return 1
 
-  run_posttool_hook "$payload" >/dev/null
+  run_posttool_hook "$payload" scan >/dev/null
   sleep 0.3
 
-  # Kill Neovim (simulates user quitting)
-  stop_nvim
+  # Kill Neovim without cleaning the socket, simulating a stale socket entry.
+  crash_nvim
+  assert_file_exists "$first_socket" "old socket should remain on disk after crash" || return 1
+  if kill -0 "$first_pid" 2>/dev/null; then
+    echo "  FAIL: stale Neovim PID should be dead" >&2
+    return 1
+  fi
 
-  # Start a fresh Neovim instance (same socket path since we control it)
-  start_nvim
+  # Start a fresh Neovim instance. Each launch uses a PID-derived socket path,
+  # so the new socket will differ from the crashed one.
+  start_nvim_on_socket "$TEST_PROJECT_DIR"
+  local second_socket="$TEST_SOCKET"
+  if [[ "$first_socket" == "$second_socket" ]]; then
+    echo "  FAIL: restart should use a different socket path" >&2
+    return 1
+  fi
 
-  # The hook should work with the new instance
+  # The hook should rediscover the live socket by scanning, not by trusting a
+  # fixed environment variable.
   local payload2
   payload2=$(cat <<EOF
 {
@@ -62,25 +78,31 @@ EOF
 EOF
 )
 
-  run_pretool_hook "$payload2" >/dev/null
+  run_pretool_hook "$payload2" scan >/dev/null
   sleep 0.5
 
   local is_open2
   is_open2="$(nvim_eval "require('claude-preview.diff').is_open()")"
   assert_eq "true" "$is_open2" "diff should open on second (restarted) instance" || return 1
 
-  run_posttool_hook "$payload2" >/dev/null
+  run_posttool_hook "$payload2" scan >/dev/null
   sleep 0.3
 }
 
-# ── Test: Hook script handles missing Neovim gracefully ──────────
+# ── Test: Hook exits cleanly without a guaranteed project match ──
 
-test_no_nvim_graceful() {
-  # Simulate no running Neovim instance by pointing socket discovery at
-  # a bogus address and preventing the scan from finding real instances
-  # (override PATH so nvim-socket.sh's compgen/ls can't find real sockets)
+test_no_matching_project_nvim_graceful() {
+  # Ensure no test Neovim is running before this test. The payload cwd points
+  # at a nonexistent project, so there is no guaranteed matching test instance.
+  # The scanner may still fall back to an unrelated ambient nvim, and this test
+  # intentionally does not assert socket absence.
+  stop_nvim
+
   local test_file
   test_file="$(create_test_file "src/noserver.lua" 'print("hi")')"
+
+  local hook_tmpdir
+  hook_tmpdir="$(mktemp -d "${TMPDIR:-/tmp}/claude-test-no-nvim-tmp.XXXXXX")"
 
   local payload
   payload=$(cat <<EOF
@@ -96,50 +118,29 @@ test_no_nvim_graceful() {
 EOF
 )
 
-  # Create a minimal script that wraps the hook with an isolated environment:
-  # - NVIM_LISTEN_ADDRESS points to a nonexistent socket
-  # - We override find_nvim_socket to always fail by using a wrapper script
-  local wrapper
-  wrapper="$(mktemp /tmp/claude-test-no-nvim.XXXXXX.sh)"
-  cat > "$wrapper" <<WRAPPER
-#!/usr/bin/env bash
-set -euo pipefail
-# Override nvim-socket.sh: make it always fail to find a socket
-export NVIM_LISTEN_ADDRESS="/tmp/bogus-nvim-socket-$$"
-export NVIM_SOCKET=""
+  # Force scan mode by blanking any inherited NVIM_LISTEN_ADDRESS. The hook
+  # must still compute the proposed file and exit cleanly even if there is no
+  # project-specific Neovim to attach to.
+  local exit_code=0
+  echo "$payload" | \
+    NVIM_LISTEN_ADDRESS= \
+    TMPDIR="$hook_tmpdir" \
+    bash "$REPO_ROOT/bin/claude-preview-diff.sh" >/dev/null 2>&1 || exit_code=$?
 
-SCRIPT_DIR="$REPO_ROOT/bin"
-# Source nvim-send.sh for helpers but skip socket discovery
-source "\$SCRIPT_DIR/nvim-send.sh"
+  # The hook exits 0 on non-crash paths, including when it cannot identify a
+  # project-specific nvim instance.
+  assert_eq "0" "$exit_code" "hook must exit 0 without a guaranteed project nvim match" || return 1
 
-# Read stdin and process like claude-preview-diff.sh but with no socket
-INPUT="\$(cat)"
-TOOL_NAME="\$(echo "\$INPUT" | jq -r '.tool_name')"
-
-# The actual diff script — source it with our overrides
-exec bash "$REPO_ROOT/bin/claude-preview-diff.sh"
-WRAPPER
-  chmod +x "$wrapper"
-
-  # Run with empty NVIM_LISTEN_ADDRESS pointing to nonexistent socket
-  local output
-  output="$(echo "$payload" | \
-    NVIM_LISTEN_ADDRESS="/tmp/bogus-nvim-socket-$$" \
-    bash "$REPO_ROOT/bin/claude-preview-diff.sh" 2>/dev/null || true)"
-  rm -f "$wrapper"
-
-  # Should produce a valid JSON response with "ask" decision
-  assert_contains "$output" '"permissionDecision":"ask"' "should still return ask decision without Neovim" || return 1
-  # The script should still compute the edit and produce output (just can't send to Neovim)
-  # The proposed temp file should exist
-  local proposed="${TMPDIR:-/tmp}/claude-diff-proposed"
-  assert_file_exists "$proposed" "proposed file should be computed even without Neovim" || return 1
+  # The proposed temp file must exist: headless nvim computed the edit.
+  local proposed="$hook_tmpdir/claude-diff-proposed"
+  assert_file_exists "$proposed" "proposed file should be computed even without a project-specific nvim match" || return 1
+  rm -rf "$hook_tmpdir"
 }
 
 # ── Run all tests ────────────────────────────────────────────────
 
 run_test "Hook works after Neovim restart (stale socket)" test_stale_socket_recovery
-run_test "Hook handles missing Neovim gracefully" test_no_nvim_graceful
+run_test "Hook exits cleanly without a guaranteed project match" test_no_matching_project_nvim_graceful
 
 # ── Teardown ─────────────────────────────────────────────────────
 

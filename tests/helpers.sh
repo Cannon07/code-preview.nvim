@@ -17,7 +17,7 @@ set -euo pipefail
 # ── Paths ────────────────────────────────────────────────────────
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-TEST_SOCKET="/tmp/claude-preview-test-nvim.sock"
+TEST_SOCKET="${TMPDIR:-/tmp}/claude-preview-test-nvim.sock"
 TEST_PROJECT_DIR=""
 NVIM_PID=""
 
@@ -40,6 +40,10 @@ TESTS_TOTAL=0
 setup_test_project() {
   TEST_PROJECT_DIR="$(mktemp -d /tmp/claude-preview-test-project.XXXXXX)"
   mkdir -p "$TEST_PROJECT_DIR"
+  # Resolve symlinks so the path matches what lsof reports for nvim's cwd.
+  # On macOS /tmp is a symlink to /private/tmp; without this the CWD-preference
+  # logic in find_nvim_socket would never match the test instance.
+  TEST_PROJECT_DIR="$(cd "$TEST_PROJECT_DIR" && pwd -P)"
 }
 
 cleanup_test_project() {
@@ -63,33 +67,69 @@ create_test_file() {
 # ── Neovim lifecycle ─────────────────────────────────────────────
 
 start_nvim() {
-  # Clean up any leftover socket
-  rm -f "$TEST_SOCKET"
+  start_nvim_on_socket "$PWD"
+}
 
-  # Start headless Neovim with the plugin in the runtime path
-  # Use --clean to avoid user config interference
-  nvim --headless --clean \
-    --cmd "set rtp+=$REPO_ROOT" \
-    --listen "$TEST_SOCKET" \
-    -c "lua require('claude-preview').setup()" \
-    &>/dev/null &
+# start_nvim_on_socket [nvim_cwd]
+#
+# Start a headless Neovim on a scanner-compatible socket path. We launch nvim
+# via a tiny wrapper shell so the child PID is baked into `/tmp/nvim.<pid>/0`,
+# which is one of the exact paths that bin/nvim-socket.sh scans in production.
+# This keeps scan-mode tests deterministic even on platforms where headless
+# nvim does not auto-create a discoverable socket on its own. Sets TEST_SOCKET
+# to the discovered path and NVIM_PID to the pid.
+start_nvim_on_socket() {
+  local nvim_cwd="${1:-$PWD}"
+
+  # Start headless Neovim with the plugin in the runtime path on a socket the
+  # production scanner can rediscover by PID.
+  bash -c '
+    nvim_cwd="$1"
+    repo_root="$2"
+    listen="/tmp/nvim.$$/0"
+    mkdir -p "${listen%/*}"
+    exec nvim --headless --clean --listen "$listen" \
+      --cmd "cd $nvim_cwd" \
+      --cmd "set rtp+=$repo_root" \
+      -c "lua require('\''claude-preview'\'').setup()"
+  ' _ "$nvim_cwd" "$REPO_ROOT" &>/dev/null &
   NVIM_PID=$!
+  TEST_SOCKET="/tmp/nvim.${NVIM_PID}/0"
 
-  # Wait for socket to appear (up to 5 seconds)
+  # Poll for the scanner-compatible socket path we asked nvim to create. If a
+  # different nested /tmp path appears, fail loudly because the production
+  # scanner would never rediscover it.
+  local unsupported=""
   local tries=0
-  while [[ ! -S "$TEST_SOCKET" ]] && (( tries < 50 )); do
+  while [[ ! -S "$TEST_SOCKET" && -z "$unsupported" ]] && (( tries < 50 )); do
     sleep 0.1
     tries=$((tries + 1))
+    unsupported=$(
+      compgen -G "/tmp/nvim.*/*/nvim.${NVIM_PID}.0" 2>/dev/null \
+        | head -1 || true
+    )
+    [[ -n "$unsupported" && ! -S "$unsupported" ]] && unsupported=""
   done
 
+  if [[ -n "$unsupported" ]]; then
+    echo -e "${RED}FATAL: Neovim auto-socket path is unsupported by bin/nvim-socket.sh: $unsupported${NC}" >&2
+    kill "$NVIM_PID" 2>/dev/null || true
+    NVIM_PID=""
+    return 1
+  fi
+
   if [[ ! -S "$TEST_SOCKET" ]]; then
-    echo -e "${RED}FATAL: Neovim failed to start (socket not created)${NC}" >&2
+    echo -e "${RED}FATAL: Neovim failed to start (scanner-compatible socket not found for PID $NVIM_PID at $TEST_SOCKET)${NC}" >&2
+    kill "$NVIM_PID" 2>/dev/null || true
+    NVIM_PID=""
     return 1
   fi
 
   # Verify it responds
   if ! nvim --server "$TEST_SOCKET" --remote-expr "1" >/dev/null 2>&1; then
-    echo -e "${RED}FATAL: Neovim started but socket not responsive${NC}" >&2
+    echo -e "${RED}FATAL: Neovim started but socket not responsive: $TEST_SOCKET${NC}" >&2
+    kill -9 "$NVIM_PID" 2>/dev/null || true
+    NVIM_PID=""
     return 1
   fi
 }
@@ -103,6 +143,15 @@ stop_nvim() {
     kill -0 "$NVIM_PID" 2>/dev/null && kill -9 "$NVIM_PID" 2>/dev/null || true
   fi
   rm -f "$TEST_SOCKET"
+  NVIM_PID=""
+}
+
+crash_nvim() {
+  if [[ -n "$NVIM_PID" ]] && kill -0 "$NVIM_PID" 2>/dev/null; then
+    kill -9 "$NVIM_PID" 2>/dev/null || true
+    wait "$NVIM_PID" 2>/dev/null || true
+    sleep 0.2
+  fi
   NVIM_PID=""
 }
 
@@ -185,7 +234,7 @@ assert_not_contains() {
 assert_file_exists() {
   local path="$1"
   local msg="${2:-"expected file to exist: $path"}"
-  if [[ ! -f "$path" ]]; then
+  if [[ ! -e "$path" ]]; then
     echo -e "  ${RED}FAIL: $msg${NC}" >&2
     return 1
   fi
@@ -194,7 +243,7 @@ assert_file_exists() {
 assert_file_not_exists() {
   local path="$1"
   local msg="${2:-"expected file NOT to exist: $path"}"
-  if [[ -f "$path" ]]; then
+  if [[ -e "$path" ]]; then
     echo -e "  ${RED}FAIL: $msg${NC}" >&2
     return 1
   fi
@@ -235,15 +284,31 @@ print_summary() {
 # redirect to /dev/null if you don't need the output.
 run_pretool_hook() {
   local json_payload="$1"
-  echo "$json_payload" | \
-    NVIM_LISTEN_ADDRESS="$TEST_SOCKET" \
-    bash "$REPO_ROOT/bin/claude-preview-diff.sh" 2>/dev/null || true
+  local mode="${2:-socket}"
+
+  if [[ "$mode" == "scan" ]]; then
+    echo "$json_payload" | \
+      NVIM_LISTEN_ADDRESS= \
+      bash "$REPO_ROOT/bin/claude-preview-diff.sh" 2>/dev/null || true
+  else
+    echo "$json_payload" | \
+      NVIM_LISTEN_ADDRESS="$TEST_SOCKET" \
+      bash "$REPO_ROOT/bin/claude-preview-diff.sh" 2>/dev/null || true
+  fi
 }
 
 # Run the PostToolUse hook script with a JSON payload
 run_posttool_hook() {
   local json_payload="$1"
-  echo "$json_payload" | \
-    NVIM_LISTEN_ADDRESS="$TEST_SOCKET" \
-    bash "$REPO_ROOT/bin/claude-close-diff.sh" 2>/dev/null || true
+  local mode="${2:-socket}"
+
+  if [[ "$mode" == "scan" ]]; then
+    echo "$json_payload" | \
+      NVIM_LISTEN_ADDRESS= \
+      bash "$REPO_ROOT/bin/claude-close-diff.sh" 2>/dev/null || true
+  else
+    echo "$json_payload" | \
+      NVIM_LISTEN_ADDRESS="$TEST_SOCKET" \
+      bash "$REPO_ROOT/bin/claude-close-diff.sh" 2>/dev/null || true
+  fi
 }

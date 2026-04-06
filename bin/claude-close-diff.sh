@@ -20,10 +20,10 @@ if [[ "$TOOL_NAME" == "Bash" ]]; then
   exit 0
 fi
 
-# Extract file path for post-close reveal
+# Extract file path for post-close reveal and buffer reload
 FILE_PATH="$(echo "$INPUT" | jq -r '.tool_input.file_path // empty' 2>/dev/null || true)"
 
-# Reload nvim buffer Claude edited to display changes without refocus, other open buffers not affected.
+# Reload nvim buffer Claude edited to display changes without refocus.
 # Iterate nvim_list_bufs() with canonical-path comparison instead of vim.fn.bufnr(path),
 # which does partial+regex matching on buffer names and mis-matches paths with regex
 # metacharacters (e.g. /tmp/foo[1].md).

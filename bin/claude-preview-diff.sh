@@ -154,7 +154,6 @@ if [[ "$HAS_NVIM" == "true" ]]; then
   fi
 
   # Determine change status for neo-tree indicator
-  # Check if the actual file exists on disk (not the temp copy, which is always created)
   if [[ -f "$FILE_PATH" ]]; then
     CHANGE_STATUS="modified"
   else

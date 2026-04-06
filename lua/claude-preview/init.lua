@@ -14,6 +14,9 @@ local default_config = {
   },
   neo_tree = {
     enabled = true,
+    -- reveal = false disables scroll-to-file in the tree. Change indicators
+    -- (modified/created/deleted icons) still appear — to disable those too,
+    -- set neo_tree.enabled = false.
     reveal = true,         -- reveal edited files in neo-tree
     reveal_root = "cwd",   -- "cwd" (default), "git" (nearest git root), or false (skip reveal)
     refresh_on_change = true,
@@ -121,8 +124,6 @@ function M.hook_context(file_path)
 
   local file_visible = false
   if visible_only and file_path ~= "" then
-    -- fs_realpath returns the filesystem's canonical form, so case-insensitive
-    -- volumes (e.g. default APFS) normalize automatically without per-OS logic.
     local target = vim.uv.fs_realpath(file_path) or vim.fn.fnamemodify(file_path, ":p")
 
     for _, w in ipairs(vim.api.nvim_list_wins()) do

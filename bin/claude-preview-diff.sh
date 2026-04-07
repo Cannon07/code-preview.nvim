@@ -146,6 +146,7 @@ if [[ "$HAS_NVIM" == "true" ]]; then
   NEO_TREE_REVEAL_ROOT=$(echo "$HOOK_CTX" | jq -r '.reveal_root // "cwd"')
   VISIBLE_ONLY=$(echo "$HOOK_CTX" | jq -r '.visible_only // false')
   FILE_VISIBLE=$(echo "$HOOK_CTX" | jq -r '.file_visible // false')
+  DEFER_PERMISSIONS=$(echo "$HOOK_CTX" | jq -r 'if .defer_claude_permissions == true then "true" else "false" end')
 
   # Decide whether to show the diff — skip nvim UI entirely when visible_only
   # is on and the file isn't in any visible window.
@@ -203,6 +204,11 @@ if [[ "$HAS_NVIM" == "true" ]]; then
   fi
 fi
 
-# No permissionDecision output — Claude Code's own permission settings
-# (bypass, ask, allowlist) are the authority on whether to prompt.
-# This hook only controls the Neovim UI layer.
+# Permission decision: when defer_claude_permissions is true (or nvim is
+# unreachable), produce no output and let Claude Code's own permission
+# settings (bypass, ask, allowlist) decide. Otherwise return "ask" to
+# prompt the user for every edit, preserving the default review workflow.
+if [[ "$HAS_NVIM" == "true" && "$DEFER_PERMISSIONS" != "true" ]]; then
+  REASON="Diff preview sent to Neovim. Review before accepting."
+  printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask","permissionDecisionReason":"%s"}}\n' "$REASON"
+fi

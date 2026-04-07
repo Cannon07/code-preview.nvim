@@ -11,6 +11,7 @@ local default_config = {
     equalize = true,
     full_file = true,
     visible_only = false,  -- only show diffs for files open in a visible nvim window
+    defer_claude_permissions = false,  -- when true, skip permissionDecision and let Claude Code's own settings decide
   },
   neo_tree = {
     enabled = true,
@@ -121,6 +122,7 @@ function M.hook_context(file_path)
   local neo_tree_reveal = (cfg.neo_tree.enabled and cfg.neo_tree.reveal) and true or false
   local reveal_root = cfg.neo_tree.reveal_root or "cwd"
   local visible_only = cfg.diff.visible_only and true or false
+  local defer_claude_permissions = cfg.diff.defer_claude_permissions and true or false
 
   local file_visible = false
   if visible_only and file_path ~= "" then
@@ -145,6 +147,7 @@ function M.hook_context(file_path)
     reveal_root = reveal_root,
     visible_only = visible_only,
     file_visible = file_visible,
+    defer_claude_permissions = defer_claude_permissions,
   })
 end
 

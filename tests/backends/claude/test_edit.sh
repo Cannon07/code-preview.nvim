@@ -34,8 +34,9 @@ EOF
   local output
   output="$(run_pretool_hook "$payload")"
 
-  # Hook should produce no output (defers to Claude Code's permission settings)
-  assert_eq "" "$output" "PreToolUse should produce no output" || return 1
+  # Default config (defer_claude_permissions=false) returns "ask" when nvim is running
+  local expected='{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask","permissionDecisionReason":"Diff preview sent to Neovim. Review before accepting."}}'
+  assert_eq "$expected" "$output" "PreToolUse should return permissionDecision ask" || return 1
 
   # Give Neovim a moment to process the RPC
   sleep 0.5
@@ -91,7 +92,8 @@ EOF
 
   local output
   output="$(run_pretool_hook "$payload")"
-  assert_eq "" "$output" || return 1
+  local expected='{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask","permissionDecisionReason":"Diff preview sent to Neovim. Review before accepting."}}'
+  assert_eq "$expected" "$output" || return 1
 
   sleep 0.5
 
@@ -134,7 +136,8 @@ EOF
 
   local output
   output="$(run_pretool_hook "$payload")"
-  assert_eq "" "$output" || return 1
+  local expected='{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask","permissionDecisionReason":"Diff preview sent to Neovim. Review before accepting."}}'
+  assert_eq "$expected" "$output" || return 1
 
   sleep 0.5
 

@@ -20,7 +20,7 @@ if [[ "$TOOL_NAME" == "Bash" ]]; then
   exit 0
 fi
 
-# Extract file path for post-close reveal and buffer reload
+# Extract file path for buffer reload
 FILE_PATH="$(echo "$INPUT" | jq -r '.tool_input.file_path // empty' 2>/dev/null || true)"
 
 # Reload nvim buffer Claude edited to display changes without refocus.

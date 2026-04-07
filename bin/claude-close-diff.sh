@@ -20,11 +20,22 @@ if [[ "$TOOL_NAME" == "Bash" ]]; then
   exit 0
 fi
 
-# Only clean up if a diff was actually open
+FILE_PATH="$(echo "$INPUT" | jq -r '.tool_input.file_path // empty' 2>/dev/null || true)"
+
+# Reload nvim buffer Claude edited to display changes without refocus, other open buffers not affected.
+# Runs regardless of diff state — Claude wrote the file whether or not a preview was shown.
+# Iterate vim.api.nvim_list_bufs() and compare canonical paths instead of using vim.fn.bufnr(path),
+# which does partial+regex matching on buffer names and mis-matches paths containing regex
+# metacharacters (e.g. /tmp/foo[1].md).
+if [[ -n "$FILE_PATH" ]]; then
+  FILE_PATH_ESC="$(escape_lua "$FILE_PATH")"
+  nvim_send "local target = vim.uv.fs_realpath('$FILE_PATH_ESC') or vim.fn.fnamemodify('$FILE_PATH_ESC', ':p') for _, b in ipairs(vim.api.nvim_list_bufs()) do local n = vim.api.nvim_buf_get_name(b) if n ~= '' then local name = vim.uv.fs_realpath(n) or vim.fn.fnamemodify(n, ':p') if name == target then vim.api.nvim_buf_call(b, function() vim.cmd('checktime ' .. b) end) break end end end" || true
+fi
+
+# Only clean up diff UI if a diff was actually open
 DIFF_OPEN=$(nvim --server "$NVIM_SOCKET" --remote-expr "luaeval(\"require('claude-preview.diff').is_open()\")" 2>/dev/null || echo "false")
 
 if [[ "$DIFF_OPEN" == "true" ]]; then
-  FILE_PATH="$(echo "$INPUT" | jq -r '.tool_input.file_path // empty' 2>/dev/null || true)"
   nvim_send "require('claude-preview.changes').clear_all()" || true
   nvim_send "require('claude-preview.diff').close_diff()" || true
   if [[ -n "$FILE_PATH" ]]; then

@@ -6,3 +6,6 @@
 
 # OpenCode local plugins (installed by :CodePreviewInstallOpenCodeHooks)
 .opencode/
+
+# Test dependencies (plenary.nvim, installed by tests/run_lua.sh)
+deps/

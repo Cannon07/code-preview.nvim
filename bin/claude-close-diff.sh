@@ -8,10 +8,13 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 INPUT="$(cat)"
 CWD="$(echo "$INPUT" | jq -r '.cwd // empty' 2>/dev/null || true)"
 TOOL_NAME="$(echo "$INPUT" | jq -r '.tool_name // empty' 2>/dev/null || true)"
+TRANSCRIPT_PATH="$(echo "$INPUT" | jq -r '.transcript_path // empty' 2>/dev/null || true)"
+TOOL_USE_ID="$(echo "$INPUT" | jq -r '.tool_use_id // empty' 2>/dev/null || true)"
 
 # Discover Neovim socket (prefer instance whose cwd matches project) and load RPC helpers
 source "$SCRIPT_DIR/nvim-socket.sh" "$CWD" 2>/dev/null
 source "$SCRIPT_DIR/nvim-send.sh"
+source "$SCRIPT_DIR/claude-preview-transcript-watch.sh"
 
 # For Bash tool (rm detection), only clear deletion markers — don't touch edit markers or diff tab
 if [[ "$TOOL_NAME" == "Bash" ]]; then
@@ -37,5 +40,10 @@ nvim_send "if require('claude-preview.diff').is_open() then pcall(function() req
 
 # Clean up temp files
 rm -f "${TMPDIR:-/tmp}/claude-diff-original" "${TMPDIR:-/tmp}/claude-diff-proposed"
+
+# Stop the transcript watcher (if one was spawned by PreToolUse)
+if [[ -n "$TRANSCRIPT_PATH" && -n "$TOOL_USE_ID" ]]; then
+  claude_preview_stop_transcript_watcher "$TRANSCRIPT_PATH" "$TOOL_USE_ID" || true
+fi
 
 exit 0

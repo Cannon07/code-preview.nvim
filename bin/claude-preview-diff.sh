@@ -12,10 +12,13 @@ INPUT="$(cat)"
 
 TOOL_NAME="$(echo "$INPUT" | jq -r '.tool_name')"
 CWD="$(echo "$INPUT" | jq -r '.cwd')"
+TRANSCRIPT_PATH="$(echo "$INPUT" | jq -r '.transcript_path // empty')"
+TOOL_USE_ID="$(echo "$INPUT" | jq -r '.tool_use_id // empty')"
 
 # Discover Neovim socket (prefer instance whose cwd matches project) and load RPC helpers
 source "$SCRIPT_DIR/nvim-socket.sh" "$CWD" 2>/dev/null || true
 source "$SCRIPT_DIR/nvim-send.sh"
+source "$SCRIPT_DIR/claude-preview-transcript-watch.sh"
 
 HAS_NVIM=true
 if [[ -z "${NVIM_SOCKET:-}" ]]; then
@@ -190,6 +193,14 @@ if [[ "$HAS_NVIM" == "true" ]]; then
   fi
 
   nvim_send "require('claude-preview.diff').show_diff('$ORIG_ESC', '$PROP_ESC', '$DISPLAY_ESC')" || true
+
+  # Spawn transcript watcher to close diff on rejection
+  if [[ -n "$TRANSCRIPT_PATH" && -n "$TOOL_USE_ID" ]]; then
+    (
+      trap '' HUP
+      claude_preview_watch_transcript "$TRANSCRIPT_PATH" "$TOOL_USE_ID"
+    ) >/dev/null 2>&1 &
+  fi
 fi
 
 # --- Always ask for user confirmation ---

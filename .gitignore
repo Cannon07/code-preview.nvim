@@ -9,3 +9,5 @@
 
 # Test dependencies (plenary.nvim, installed by tests/run_lua.sh)
 deps/
+.github/
+.nvimlog

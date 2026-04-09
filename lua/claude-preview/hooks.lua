@@ -135,8 +135,8 @@ function M.install_opencode()
   local target = opencode_target_dir()
   vim.fn.mkdir(target, "p")
 
-  -- Copy plugin files
-  local files = { "index.ts", "nvim.ts", "edits.ts", "package.json", "tsconfig.json" }
+  -- Copy plugin files (nvim.ts and edits.ts removed — core scripts handle this now)
+  local files = { "index.ts", "package.json", "tsconfig.json" }
   for _, file in ipairs(files) do
     local src_path = source .. "/" .. file
     local dst_path = target .. "/" .. file
@@ -145,19 +145,35 @@ function M.install_opencode()
     end
   end
 
+  -- Write bin-path.txt so the plugin can find the core scripts
+  local bin_path_file = target .. "/bin-path.txt"
+  local bf = io.open(bin_path_file, "w")
+  if bf then
+    bf:write(bin_dir())
+    bf:close()
+  end
+
   vim.notify("[claude-preview] OpenCode plugin installed → " .. target, vim.log.levels.INFO)
 end
 
 function M.uninstall_opencode()
   local target = opencode_target_dir()
 
-  local files = { "index.ts", "nvim.ts", "edits.ts", "package.json", "tsconfig.json" }
+  local files = { "index.ts", "package.json", "tsconfig.json", "bin-path.txt" }
   local removed = false
   for _, file in ipairs(files) do
     local path = target .. "/" .. file
     if vim.fn.filereadable(path) == 1 then
       vim.fn.delete(path)
       removed = true
+    end
+  end
+
+  -- Also clean up legacy files from previous versions
+  for _, legacy in ipairs({ "nvim.ts", "edits.ts" }) do
+    local path = target .. "/" .. legacy
+    if vim.fn.filereadable(path) == 1 then
+      vim.fn.delete(path)
     end
   end
 

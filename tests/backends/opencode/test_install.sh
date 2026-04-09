@@ -17,10 +17,9 @@ test_install_opencode() {
 
   local target_dir="$TEST_PROJECT_DIR/.opencode/plugins"
   assert_file_exists "$target_dir/index.ts" "index.ts should be copied" || return 1
-  assert_file_exists "$target_dir/nvim.ts" "nvim.ts should be copied" || return 1
-  assert_file_exists "$target_dir/edits.ts" "edits.ts should be copied" || return 1
   assert_file_exists "$target_dir/package.json" "package.json should be copied" || return 1
   assert_file_exists "$target_dir/tsconfig.json" "tsconfig.json should be copied" || return 1
+  assert_file_exists "$target_dir/bin-path.txt" "bin-path.txt should be written" || return 1
 }
 
 # ── Test: Uninstall OpenCode plugin ──────────────────────────────
@@ -36,8 +35,7 @@ test_uninstall_opencode() {
 
   local target_dir="$TEST_PROJECT_DIR/.opencode/plugins"
   assert_file_not_exists "$target_dir/index.ts" "index.ts should be removed" || return 1
-  assert_file_not_exists "$target_dir/nvim.ts" "nvim.ts should be removed" || return 1
-  assert_file_not_exists "$target_dir/edits.ts" "edits.ts should be removed" || return 1
+  assert_file_not_exists "$target_dir/bin-path.txt" "bin-path.txt should be removed" || return 1
 }
 
 # ── Run all tests ────────────────────────────────────────────────

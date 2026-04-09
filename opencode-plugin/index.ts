@@ -1,217 +1,130 @@
 // index.ts — OpenCode plugin entry point
 //
-// Registers tool.execute.before and tool.execute.after hooks to intercept
-// file edits and send diff previews to Neovim via RPC.
+// Thin adapter that translates OpenCode's hook format to the normalized
+// JSON format and delegates to the unified core shell scripts.
 
 import type { Plugin } from "@opencode-ai/plugin"
-import { writeFileSync, existsSync, unlinkSync } from "fs"
-import { dirname, resolve, relative } from "path"
-import { tmpdir } from "os"
+import { execSync } from "child_process"
+import { readFileSync } from "fs"
+import { resolve, dirname } from "path"
+import { fileURLToPath } from "url"
 
-import { findNvimSocket, escapeLua, nvimSend } from "./nvim.js"
-import { applyEdit, applyMultiEdit, readFileOrEmpty } from "./edits.js"
+// ── Resolve path to bin/ directory ───────────────────────────────
 
-// ── Temp file management ──────────────────────────────────────────
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = dirname(__filename)
 
-const ORIG_FILE = resolve(tmpdir(), "claude-diff-original")
-const PROP_FILE = resolve(tmpdir(), "claude-diff-proposed")
-
-function cleanupTempFiles(): void {
-  try { unlinkSync(ORIG_FILE) } catch {}
-  try { unlinkSync(PROP_FILE) } catch {}
+function binDir(): string {
+  // When installed to .opencode/plugins/, bin-path.txt contains the
+  // absolute path to the plugin's bin/ directory.
+  try {
+    return readFileSync(resolve(__dirname, "bin-path.txt"), "utf-8").trim()
+  } catch {
+    // Fallback for development: resolve relative to plugin source
+    return resolve(__dirname, "../bin")
+  }
 }
 
-// ── Tool name constants ───────────────────────────────────────────
+// ── Tool name mapping ────────────────────────────────────────────
 
-const EDIT_TOOLS = new Set(["edit", "write", "multiedit", "apply_patch"])
-const RM_PATTERN = /^(sudo\s+)?rm\s/
+const TOOL_MAP: Record<string, string> = {
+  edit: "Edit",
+  write: "Write",
+  multiedit: "MultiEdit",
+  bash: "Bash",
+  apply_patch: "ApplyPatch",
+}
 
-// ── Plugin entry point ────────────────────────────────────────────
+// ── Format translation ──────────────────────────────────────────
+
+function toNormalizedJson(
+  tool: string,
+  args: Record<string, any>,
+  cwd: string,
+): string | null {
+  const toolName = TOOL_MAP[tool]
+  if (!toolName) return null
+
+  const toolInput: Record<string, any> = {}
+
+  // Resolve file path (OpenCode may pass relative paths)
+  if (args.filePath !== undefined) {
+    const p = args.filePath as string
+    toolInput.file_path = p && !p.startsWith("/") ? resolve(cwd, p) : p
+  }
+
+  // Edit fields (camelCase → snake_case)
+  if (args.oldString !== undefined) toolInput.old_string = args.oldString
+  if (args.newString !== undefined) toolInput.new_string = args.newString
+  if (args.replaceAll !== undefined) toolInput.replace_all = args.replaceAll
+
+  // Write fields
+  if (args.content !== undefined) toolInput.content = args.content
+
+  // MultiEdit fields
+  if (args.edits !== undefined) {
+    toolInput.edits = (args.edits as any[]).map((e) => ({
+      old_string: e.oldString,
+      new_string: e.newString,
+    }))
+  }
+
+  // Bash fields
+  if (args.command !== undefined) toolInput.command = args.command
+
+  // ApplyPatch fields
+  if (args.patchText !== undefined) toolInput.patch_text = args.patchText
+
+  return JSON.stringify({ tool_name: toolName, cwd, tool_input: toolInput })
+}
+
+// ── Core script execution ───────────────────────────────────────
+
+function runCoreScript(script: string, json: string): void {
+  const bin = binDir()
+  try {
+    execSync(`"${bin}/${script}"`, {
+      input: json,
+      env: { ...process.env, CLAUDE_PREVIEW_BACKEND: "opencode" },
+      timeout: 15000,
+      stdio: ["pipe", "pipe", "pipe"],
+    })
+  } catch {
+    // Errors are non-fatal — the diff preview is best-effort
+  }
+}
+
+// ── Hook serialization ─────────────────────────────────────────
+// OpenCode may fire tool.execute.after(file1) and tool.execute.before(file2)
+// concurrently. Without serialization, the close_diff from file1's after-hook
+// races with the show_diff from file2's before-hook, killing file2's preview.
+// A simple queue ensures hooks execute one at a time.
+
+let hookQueue: Promise<void> = Promise.resolve()
+
+function enqueueHook(fn: () => void): Promise<void> {
+  hookQueue = hookQueue.then(() => {
+    try { fn() } catch { /* non-fatal */ }
+  })
+  return hookQueue
+}
+
+// ── Plugin entry point ──────────────────────────────────────────
 
 const plugin: Plugin = async ({ directory }) => {
-  const projectCwd = directory
-
   return {
     "tool.execute.before": async (input, output) => {
-      const { tool } = input
       const args = output.args as Record<string, any>
-      // ── Bash (rm detection) ───────────────────────────────
-      if (tool === "bash") {
-        const command: string = args.command ?? ""
-        const subcmds = command.split(/[;&|]{1,2}/)
-        const rmPaths: string[] = []
-
-        for (const sub of subcmds) {
-          const trimmed = sub.trim()
-          if (!RM_PATTERN.test(trimmed)) continue
-
-          const parts = trimmed
-            .replace(/^(sudo\s+)?rm\s+/, "")
-            .split(/\s+/)
-            .filter((p) => !p.startsWith("-") && p.length > 0)
-
-          for (const p of parts) {
-            rmPaths.push(p.startsWith("/") ? p : resolve(projectCwd, p))
-          }
-        }
-
-        if (rmPaths.length === 0) return
-
-        const socket = findNvimSocket(projectCwd)
-        if (!socket) return
-
-        for (const rmPath of rmPaths) {
-          nvimSend(socket, `require('claude-preview.changes').set('${escapeLua(rmPath)}', 'deleted')`)
-        }
-        nvimSend(socket, "pcall(function() require('claude-preview.neo_tree').refresh() end)")
-        nvimSend(
-          socket,
-          `vim.defer_fn(function() pcall(function() require('claude-preview.neo_tree').reveal('${escapeLua(rmPaths[0])}') end) end, 300)`,
-        )
-        return
-      }
-
-      // ── Skip non-edit tools ───────────────────────────────
-      if (!EDIT_TOOLS.has(tool)) return
-
-      // ── Compute original and proposed content ─────────────
-      let filePath: string
-      let original: string
-      let proposed: string
-
-      // Resolve filePath — the hook fires with raw LLM args which may
-      // contain a relative path.  The tool itself resolves it inside
-      // execute(), but that happens *after* the hook, so we must do it
-      // here too.
-      const resolveFilePath = (p: string) =>
-        p && !p.startsWith("/") ? resolve(projectCwd, p) : p
-
-      switch (tool) {
-        case "edit": {
-          filePath = resolveFilePath(args.filePath)
-          original = readFileOrEmpty(filePath)
-          proposed = applyEdit(
-            original,
-            args.oldString ?? "",
-            args.newString ?? "",
-            args.replaceAll ?? false,
-          )
-          break
-        }
-
-        case "write": {
-          filePath = resolveFilePath(args.filePath)
-          original = readFileOrEmpty(filePath)
-          proposed = args.content ?? ""
-          break
-        }
-
-        case "multiedit": {
-          filePath = resolveFilePath(args.filePath)
-          original = readFileOrEmpty(filePath)
-          proposed = applyMultiEdit(original, args.edits ?? [])
-          break
-        }
-
-        case "apply_patch": {
-          const patchText: string = args.patchText ?? ""
-          const fileMatch = patchText.match(/^---\s+a\/(.+)$/m)
-            ?? patchText.match(/^\+\+\+\s+b\/(.+)$/m)
-          if (!fileMatch) return
-
-          filePath = resolve(projectCwd, fileMatch[1])
-          original = readFileOrEmpty(filePath)
-          // TODO: Implement a proper unified diff parser for V2
-          proposed = original
-          return // Skip diff preview for apply_patch in V1
-        }
-
-        default:
-          return
-      }
-
-      // ── Write temp files ──────────────────────────────────
-      writeFileSync(ORIG_FILE, original)
-      writeFileSync(PROP_FILE, proposed)
-
-      // ── Send to Neovim ────────────────────────────────────
-      const socket = findNvimSocket(projectCwd)
-      if (!socket) return
-
-      const displayName = relative(projectCwd, filePath) || filePath
-      const changeStatus = existsSync(filePath) ? "modified" : "created"
-
-      const origEsc = escapeLua(ORIG_FILE)
-      const propEsc = escapeLua(PROP_FILE)
-      const displayEsc = escapeLua(displayName)
-      const filePathEsc = escapeLua(filePath)
-
-      // Send all commands in a single pcall-wrapped block to avoid
-      // one error blocking subsequent commands via --remote-send
-      const revealCmd = changeStatus === "modified"
-        ? `vim.defer_fn(function() pcall(function() require('claude-preview.neo_tree').reveal('${filePathEsc}') end) end, 300)`
-        : (() => {
-            let revealDir = dirname(filePath)
-            while (!existsSync(revealDir) && revealDir !== "/") {
-              revealDir = dirname(revealDir)
-            }
-            return `vim.defer_fn(function() pcall(function() require('claude-preview.neo_tree').reveal('${escapeLua(revealDir)}') end) end, 300)`
-          })()
-
-      const luaBlock = [
-        `pcall(function() require('claude-preview.changes').set('${filePathEsc}', '${changeStatus}') end)`,
-        `pcall(function() require('claude-preview.neo_tree').refresh() end)`,
-        `pcall(function() ${revealCmd} end)`,
-        `local ok, err = pcall(function() require('claude-preview.diff').show_diff('${origEsc}', '${propEsc}', '${displayEsc}') end)`,
-        `if not ok then vim.notify('claude-preview show_diff error: ' .. tostring(err), vim.log.levels.ERROR) end`,
-      ].join(" ")
-
-      nvimSend(socket, luaBlock)
+      const json = toNormalizedJson(input.tool, args, directory)
+      if (!json) return
+      await enqueueHook(() => runCoreScript("core-pre-tool.sh", json))
     },
 
     "tool.execute.after": async (input, _output) => {
-      const { tool } = input
-      // For bash (rm detection), only clear deletion markers
-      if (tool === "bash") {
-        const socket = findNvimSocket(projectCwd)
-        if (!socket) return
-
-        nvimSend(socket, [
-          "pcall(function() require('claude-preview.changes').clear_by_status('deleted') end)",
-          "vim.defer_fn(function() pcall(function() require('claude-preview.neo_tree').refresh() end) end, 200)",
-        ].join(" "))
-        return
-      }
-
-      if (!EDIT_TOOLS.has(tool)) return
-
-      const socket = findNvimSocket(projectCwd)
-      if (!socket) return
-
-      const args = input.args as Record<string, any>
-      const rawPath: string | undefined = args?.filePath
-      const filePath = rawPath && !rawPath.startsWith("/") ? resolve(projectCwd, rawPath) : rawPath
-
-      // Send all cleanup commands in a single batch
-      const luaLines = [
-        "pcall(function() require('claude-preview.changes').clear_all() end)",
-        "pcall(function() require('claude-preview.diff').close_diff() end)",
-      ]
-
-      if (filePath) {
-        const filePathEsc = escapeLua(filePath)
-        luaLines.push(
-          `vim.defer_fn(function() pcall(function() require('claude-preview.neo_tree').refresh() end) vim.defer_fn(function() pcall(function() require('claude-preview.neo_tree').reveal('${filePathEsc}') end) end, 200) end, 200)`,
-        )
-      } else {
-        luaLines.push(
-          "vim.defer_fn(function() pcall(function() require('claude-preview.neo_tree').refresh() end) end, 200)",
-        )
-      }
-
-      nvimSend(socket, luaLines.join(" "))
-
-      cleanupTempFiles()
+      const args = (input as any).args ?? {}
+      const json = toNormalizedJson(input.tool, args, directory)
+      if (!json) return
+      await enqueueHook(() => runCoreScript("core-post-tool.sh", json))
     },
   }
 }

@@ -4,6 +4,11 @@ local M = {}
 local diff_tab = nil
 local diff_bufs = {}
 local diff_augroup = nil
+local diff_file_path = nil  -- tag: which file this diff belongs to
+
+-- Queue for pending diffs (OpenCode fires all before-hooks before any after-hooks,
+-- so we queue subsequent diffs and show them as each one is closed).
+local diff_queue = {}
 
 -- Namespaces created at module load, but colors applied inside show_diff()
 -- after setup() has merged the user config.
@@ -34,8 +39,15 @@ local function read_file_lines(path)
   return lines
 end
 
-function M.is_open()
-  return diff_tab ~= nil and vim.api.nvim_tabpage_is_valid(diff_tab)
+function M.is_open(file_path)
+  if diff_tab == nil or not vim.api.nvim_tabpage_is_valid(diff_tab) then
+    return false
+  end
+  -- If a file_path is given, only return true if the diff is for that file
+  if file_path and file_path ~= "" and diff_file_path and diff_file_path ~= file_path then
+    return false
+  end
+  return true
 end
 
 -- Module-level storage for inline diff line numbers
@@ -320,9 +332,35 @@ local function show_inline_diff(original_path, proposed_path, real_file_path, cf
   end
 end
 
-function M.show_diff(original_path, proposed_path, real_file_path)
+function M.show_diff(original_path, proposed_path, real_file_path, abs_file_path)
+  -- If a diff is already open for a DIFFERENT file, queue this one instead
+  -- of replacing it. OpenCode fires all before-hooks before any after-hooks,
+  -- so without queuing the user would only see the last file's diff.
+  if M.is_open() and abs_file_path and diff_file_path ~= abs_file_path then
+    -- Snapshot the temp file contents now — they'll be overwritten by the
+    -- next hook call. We read them into memory so the queued diff survives.
+    local orig_lines = {}
+    local prop_lines = {}
+    local f = io.open(original_path, "r")
+    if f then for l in f:lines() do orig_lines[#orig_lines + 1] = l end; f:close() end
+    f = io.open(proposed_path, "r")
+    if f then for l in f:lines() do prop_lines[#prop_lines + 1] = l end; f:close() end
+    table.insert(diff_queue, {
+      orig_lines = orig_lines,
+      prop_lines = prop_lines,
+      real_file_path = real_file_path,
+      abs_file_path = abs_file_path,
+    })
+    return
+  end
+
   -- Close any existing diff first
   M.close_diff()
+
+  -- Tag this diff with the absolute file path it belongs to.
+  -- abs_file_path is the full path used by post-tool to check is_open();
+  -- real_file_path is the display name shown in the winbar.
+  diff_file_path = abs_file_path or real_file_path
 
   local cfg = require("claude-preview").config
 
@@ -445,13 +483,35 @@ function M.close_diff()
 
   diff_tab  = nil
   diff_bufs = {}
+  diff_file_path = nil
   inline_line_numbers = {}
   inline_line_types = {}
   inline_diff_win = nil
+
+  -- If there's a queued diff, show it now
+  if #diff_queue > 0 then
+    local next_diff = table.remove(diff_queue, 1)
+    M.show_diff_from_lines(next_diff.orig_lines, next_diff.prop_lines,
+                           next_diff.real_file_path, next_diff.abs_file_path)
+  end
+end
+
+--- Show a diff from pre-read line arrays (used by the queue).
+--- Writes lines to temp files then delegates to show_diff().
+function M.show_diff_from_lines(orig_lines, prop_lines, real_file_path, abs_file_path)
+  local tmpdir = os.getenv("TMPDIR") or "/tmp"
+  local orig_path = tmpdir .. "/claude-diff-original"
+  local prop_path = tmpdir .. "/claude-diff-proposed"
+  local f = io.open(orig_path, "w")
+  if f then f:write(table.concat(orig_lines, "\n")); if #orig_lines > 0 then f:write("\n") end; f:close() end
+  f = io.open(prop_path, "w")
+  if f then f:write(table.concat(prop_lines, "\n")); if #prop_lines > 0 then f:write("\n") end; f:close() end
+  M.show_diff(orig_path, prop_path, real_file_path, abs_file_path)
 end
 
 -- Close diff AND clear neo-tree indicators (for manual close via <leader>dq)
 function M.close_diff_and_clear()
+  diff_queue = {}  -- discard pending diffs on manual close
   M.close_diff()
   pcall(function() require("claude-preview.changes").clear_all() end)
   pcall(function() require("claude-preview.neo_tree").refresh() end)

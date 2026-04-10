@@ -31,6 +31,7 @@ start_nvim
 # ── Test: OpenCode edit before/after ─────────────────────────────
 
 test_opencode_edit() {
+  reset_test_state
   local test_file
   test_file="$(create_test_file "src/oc_edit.lua" 'local x = 1')"
 
@@ -68,6 +69,7 @@ test_opencode_edit() {
 # ── Test: OpenCode write (new file) ──────────────────────────────
 
 test_opencode_write_new() {
+  reset_test_state
   local new_file="$TEST_PROJECT_DIR/src/oc_new.lua"
 
   local output
@@ -95,6 +97,7 @@ test_opencode_write_new() {
 # ── Test: OpenCode bash rm detection ─────────────────────────────
 
 test_opencode_bash_rm() {
+  reset_test_state
   local test_file
   test_file="$(create_test_file "oc_delete_me.txt" 'goodbye')"
 
@@ -123,6 +126,7 @@ test_opencode_bash_rm() {
 # ── Test: OpenCode relative path resolution ──────────────────────
 
 test_opencode_relative_path() {
+  reset_test_state
   local test_file
   test_file="$(create_test_file "src/relative.lua" 'local r = 1')"
 
@@ -145,12 +149,66 @@ test_opencode_relative_path() {
   sleep 0.5
 }
 
+# ── Test: OpenCode multi-file (before→before→after→after) ───────
+
+test_opencode_multi_file() {
+  reset_test_state
+
+  local file1
+  file1="$(create_test_file "src/multi1.lua" 'local a = 1')"
+  local file2
+  file2="$(create_test_file "src/multi2.lua" 'local b = 2')"
+
+  # Step 1: Fire both before-hooks (no after-hooks yet).
+  # This is the real OpenCode lifecycle — all before-hooks fire before any after-hooks.
+  local output
+  output="$(run_opencode multi_before_before \
+    "$TEST_SOCKET" "$TEST_PROJECT_DIR" \
+    "$file1" "local a = 1" "local a = 10" \
+    "$file2" "local b = 2" "local b = 20")"
+
+  if [[ "$output" != *"OK"* ]]; then
+    echo -e "  ${RED}harness returned: $output${NC}" >&2
+    return 1
+  fi
+
+  sleep 0.5
+
+  # After both before-hooks: file1's diff should be showing (it arrived first).
+  local is_open_file1
+  is_open_file1="$(nvim_eval "require('claude-preview.diff').is_open('$file1')")"
+  assert_eq "true" "$is_open_file1" "file1 diff should be showing after both before-hooks" || return 1
+
+  # Step 2: Close file1's diff via after-hook.
+  run_opencode edit_after "$TEST_SOCKET" "$TEST_PROJECT_DIR" "$file1" >/dev/null 2>&1
+  sleep 0.5
+
+  # file1 closed → file2 should auto-show from the queue.
+  local is_open_file2
+  is_open_file2="$(nvim_eval "require('claude-preview.diff').is_open('$file2')")"
+  assert_eq "true" "$is_open_file2" "file2 diff should auto-show after file1 closes" || return 1
+
+  # Step 3: Close file2's diff via after-hook.
+  run_opencode edit_after "$TEST_SOCKET" "$TEST_PROJECT_DIR" "$file2" >/dev/null 2>&1
+  sleep 0.5
+
+  # Everything should be closed now.
+  local is_open_final
+  is_open_final="$(nvim_eval "require('claude-preview.diff').is_open()")"
+  assert_eq "false" "$is_open_final" "diff should be closed after full cycle" || return 1
+
+  local changes_count
+  changes_count="$(nvim_eval "vim.tbl_count(require('claude-preview.changes').get_all())")"
+  assert_eq "0" "$changes_count" "changes should be cleared after full cycle" || return 1
+}
+
 # ── Run all tests ────────────────────────────────────────────────
 
 run_test "OpenCode edit before/after opens and closes diff" test_opencode_edit
 run_test "OpenCode write (new file) marks as created" test_opencode_write_new
 run_test "OpenCode bash rm marks as deleted" test_opencode_bash_rm
 run_test "OpenCode resolves relative file paths" test_opencode_relative_path
+run_test "OpenCode multi-file before→before→after→after" test_opencode_multi_file
 
 # ── Teardown ─────────────────────────────────────────────────────
 

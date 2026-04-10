@@ -102,6 +102,28 @@ async function main() {
       break
     }
 
+    case "multi_before_before": {
+      // Fire two before-hooks without any after-hooks.
+      // Used to verify the diff queue state mid-lifecycle.
+      const file1 = process.argv[5]
+      const old1 = process.argv[6]
+      const new1 = process.argv[7]
+      const file2 = process.argv[8]
+      const old2 = process.argv[9]
+      const new2 = process.argv[10]
+
+      await beforeHook(
+        { tool: "edit" },
+        { args: { filePath: file1, oldString: old1, newString: new1, replaceAll: false } },
+      )
+      await beforeHook(
+        { tool: "edit" },
+        { args: { filePath: file2, oldString: old2, newString: new2, replaceAll: false } },
+      )
+      console.log("OK")
+      break
+    }
+
     default:
       console.error(`Unknown action: ${action}`)
       process.exit(1)

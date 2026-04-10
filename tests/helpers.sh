@@ -53,6 +53,19 @@ cleanup_test_project() {
   TEST_PROJECT_DIR=""
 }
 
+# ── Test state cleanup ───────────────────────────────────────────
+
+# Reset Neovim state and temp files between tests.  Call at the start
+# of each test function that touches diffs or changes.
+reset_test_state() {
+  # Close any open diff and clear changes inside the running Neovim
+  nvim_exec "require('claude-preview.diff').close_diff_and_clear()" 2>/dev/null || true
+  # Remove temp files that persist across runs (shared by both backends)
+  local _tmpdir="${TMPDIR:-/tmp}"
+  rm -f "$_tmpdir/claude-diff-original" "$_tmpdir/claude-diff-proposed"
+  sleep 0.3
+}
+
 # ── Create a file in the test project ────────────────────────────
 
 create_test_file() {
@@ -162,7 +175,7 @@ nvim_eval() {
   local lua_expr="$1"
   local tmp_lua
   local tmp_out
-  tmp_lua="$(mktemp /tmp/claude-preview-test-eval.XXXXXX.lua)"
+  tmp_lua="$(mktemp /tmp/claude-preview-test-eval.XXXXXX)"
   tmp_out="/tmp/claude-preview-test-eval-out.$$"
 
   # Write Lua code that evaluates the expression and writes result to a temp file
@@ -186,7 +199,7 @@ nvim_eval() {
 nvim_exec() {
   local lua_cmd="$1"
   local tmp_lua
-  tmp_lua="$(mktemp /tmp/claude-preview-test-exec.XXXXXX.lua)"
+  tmp_lua="$(mktemp /tmp/claude-preview-test-exec.XXXXXX)"
   printf '%s' "$lua_cmd" > "$tmp_lua"
   nvim --server "$TEST_SOCKET" --remote-expr "execute('luafile $tmp_lua')" >/dev/null 2>&1
   local rc=$?

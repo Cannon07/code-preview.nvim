@@ -13,6 +13,7 @@ start_nvim
 # ── Test: Edit tool opens diff preview ───────────────────────────
 
 test_edit_opens_diff() {
+  reset_test_state
   local test_file
   test_file="$(create_test_file "src/hello.lua" 'print("hello world")')"
 
@@ -75,6 +76,7 @@ EOF
 # ── Test: Write tool (new file) opens diff ───────────────────────
 
 test_write_new_file() {
+  reset_test_state
   local new_file="$TEST_PROJECT_DIR/src/new_module.lua"
 
   local payload
@@ -118,6 +120,7 @@ EOF
 # ── Test: Write tool (existing file) opens diff ─────────────────
 
 test_write_existing_file() {
+  reset_test_state
   local test_file
   test_file="$(create_test_file "config.json" '{"key": "old_value"}')"
 
@@ -153,6 +156,7 @@ EOF
 # ── Test: Bash rm detection marks files as deleted ───────────────
 
 test_bash_rm_detection() {
+  reset_test_state
   local test_file
   test_file="$(create_test_file "to_delete.txt" 'this will be deleted')"
 
@@ -188,6 +192,7 @@ EOF
 # ── Test: Non-rm Bash command is ignored ─────────────────────────
 
 test_bash_non_rm_passthrough() {
+  reset_test_state
   local payload
   payload=$(cat <<EOF
 {
@@ -212,6 +217,7 @@ EOF
 # ── Test: Unknown tool is ignored ────────────────────────────────
 
 test_unknown_tool_passthrough() {
+  reset_test_state
   local payload
   payload=$(cat <<EOF
 {
@@ -233,6 +239,7 @@ EOF
 # ── Test: Edit with replace_all ──────────────────────────────────
 
 test_edit_replace_all() {
+  reset_test_state
   local test_file
   test_file="$(create_test_file "src/replace_all.txt" 'foo bar foo baz foo')"
 
@@ -267,6 +274,7 @@ EOF
 # ── Test: Diff reopens correctly (sequential edits) ──────────────
 
 test_sequential_edits() {
+  reset_test_state
   local file1
   file1="$(create_test_file "src/file1.lua" 'local x = 1')"
   local file2

@@ -83,4 +83,69 @@ describe("diff lifecycle", function()
     os.remove(orig)
     os.remove(prop)
   end)
+
+  it("is_open with file_path only matches the tagged file", function()
+    local orig = tmp_file("tag_orig.txt", "aaa")
+    local prop = tmp_file("tag_prop.txt", "bbb")
+
+    -- Pass abs_file_path as 4th arg to tag the diff
+    diff.show_diff(orig, prop, "tag.txt", "/abs/path/tag.txt")
+
+    assert.is_true(diff.is_open())                    -- no arg: any diff is open
+    assert.is_true(diff.is_open("/abs/path/tag.txt")) -- matching file
+    assert.is_false(diff.is_open("/abs/path/other.txt")) -- different file
+
+    diff.close_diff()
+    os.remove(orig)
+    os.remove(prop)
+  end)
+
+  it("show_diff queues when a diff for a different file is already open", function()
+    local orig1 = tmp_file("q_orig1.txt", "file1 original")
+    local prop1 = tmp_file("q_prop1.txt", "file1 proposed")
+    local orig2 = tmp_file("q_orig2.txt", "file2 original")
+    local prop2 = tmp_file("q_prop2.txt", "file2 proposed")
+
+    -- Open diff for file1
+    diff.show_diff(orig1, prop1, "file1.txt", "/abs/file1.txt")
+    assert.is_true(diff.is_open("/abs/file1.txt"))
+
+    -- Show diff for file2 while file1 is open — should queue, not replace
+    diff.show_diff(orig2, prop2, "file2.txt", "/abs/file2.txt")
+    assert.is_true(diff.is_open("/abs/file1.txt"))  -- file1 still showing
+
+    -- Close file1's diff — file2 should auto-show from queue
+    diff.close_diff()
+    assert.is_true(diff.is_open("/abs/file2.txt"))
+
+    -- Close file2
+    diff.close_diff()
+    assert.is_false(diff.is_open())
+
+    os.remove(orig1)
+    os.remove(prop1)
+    os.remove(orig2)
+    os.remove(prop2)
+  end)
+
+  it("close_diff_and_clear discards the queue", function()
+    local orig1 = tmp_file("drain_orig1.txt", "aaa")
+    local prop1 = tmp_file("drain_prop1.txt", "bbb")
+    local orig2 = tmp_file("drain_orig2.txt", "ccc")
+    local prop2 = tmp_file("drain_prop2.txt", "ddd")
+
+    diff.show_diff(orig1, prop1, "drain1.txt", "/abs/drain1.txt")
+    diff.show_diff(orig2, prop2, "drain2.txt", "/abs/drain2.txt") -- queued
+
+    assert.is_true(diff.is_open("/abs/drain1.txt"))
+
+    -- Manual close should discard the queue — file2 should NOT auto-show
+    diff.close_diff_and_clear()
+    assert.is_false(diff.is_open())
+
+    os.remove(orig1)
+    os.remove(prop1)
+    os.remove(orig2)
+    os.remove(prop2)
+  end)
 end)

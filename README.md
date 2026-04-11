@@ -1,4 +1,4 @@
-# claude-preview.nvim
+# code-preview.nvim
 
 A Neovim plugin that shows a **diff preview before your AI coding agent applies any file change** — letting you review exactly what's changing before accepting.
 
@@ -63,7 +63,7 @@ Supports [Claude Code](https://docs.anthropic.com/en/docs/claude-code) and [Open
 
 ```lua
 {
-  "Cannon07/claude-preview.nvim",
+  "Cannon07/code-preview.nvim",
   config = function()
     require("code-preview").setup()
   end,
@@ -73,7 +73,7 @@ Supports [Claude Code](https://docs.anthropic.com/en/docs/claude-code) and [Open
 ### Manual (path-based)
 
 ```lua
-vim.opt.rtp:prepend("/path/to/claude-preview.nvim")
+vim.opt.rtp:prepend("/path/to/code-preview.nvim")
 require("code-preview").setup()
 ```
 
@@ -148,6 +148,8 @@ require("code-preview").setup({
     auto_close = true,   -- close diff after accept
     equalize   = true,   -- 50/50 split widths (tab/vsplit only)
     full_file  = true,   -- show full file, not just diff hunks (tab/vsplit only)
+    visible_only = false, -- skip diffs for files not open in any Neovim buffer
+    defer_claude_permissions = false, -- for Claude Code: let its own settings decide, don't prompt
   },
   highlights = {
     current = {          -- CURRENT (original) side — tab/vsplit layouts
@@ -252,6 +254,8 @@ All neo-tree options with defaults:
 require("code-preview").setup({
   neo_tree = {
     enabled = true,             -- set false to disable neo-tree integration
+    reveal = true,              -- auto-reveal changed files in the tree
+    reveal_root = "cwd",        -- "cwd" (current working dir) or "git" (git root)
     position = "right",         -- neo-tree window position: "left", "right", "float"
     symbols = {
       modified = "󰏫",
@@ -274,7 +278,7 @@ require("code-preview").setup({
 ## Architecture
 
 ```
-claude-preview.nvim/
+code-preview.nvim/
 ├── lua/code-preview/
 │   ├── init.lua                     setup(), config, commands
 │   ├── diff.lua                     show_diff(), close_diff()

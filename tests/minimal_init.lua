@@ -14,4 +14,4 @@ vim.opt.swapfile = false
 vim.cmd("runtime! plugin/plenary.vim")
 
 -- Load the plugin
-require("claude-preview").setup()
+require("code-preview").setup()

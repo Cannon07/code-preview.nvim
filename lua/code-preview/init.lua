@@ -67,50 +67,71 @@ local function deep_merge(base, override)
   return result
 end
 
+-- Helper: create a deprecated alias that warns and delegates
+local function deprecated_alias(old_name, new_name)
+  vim.api.nvim_create_user_command(old_name, function()
+    vim.notify(
+      "[code-preview] :" .. old_name .. " is deprecated, use :" .. new_name,
+      vim.log.levels.WARN
+    )
+    vim.cmd(new_name)
+  end, { desc = "(deprecated) Use :" .. new_name .. " instead" })
+end
+
 function M.setup(user_config)
   M.config = deep_merge(default_config, user_config or {})
 
-  vim.api.nvim_create_user_command("ClaudePreviewInstallHooks", function()
-    require("claude-preview.hooks").install()
-  end, { desc = "Install claude-preview PreToolUse/PostToolUse hooks" })
+  -- ── New commands ──────────────────────────────────────────────
 
-  vim.api.nvim_create_user_command("ClaudePreviewUninstallHooks", function()
-    require("claude-preview.hooks").uninstall()
-  end, { desc = "Uninstall claude-preview hooks" })
+  vim.api.nvim_create_user_command("CodePreviewInstallClaudeCodeHooks", function()
+    require("code-preview.backends.claudecode").install()
+  end, { desc = "Install code-preview PreToolUse/PostToolUse hooks for Claude Code" })
+
+  vim.api.nvim_create_user_command("CodePreviewUninstallClaudeCodeHooks", function()
+    require("code-preview.backends.claudecode").uninstall()
+  end, { desc = "Uninstall code-preview hooks for Claude Code" })
 
   vim.api.nvim_create_user_command("CodePreviewInstallOpenCodeHooks", function()
-    require("claude-preview.hooks").install_opencode()
-  end, { desc = "Install claude-preview plugin for OpenCode" })
+    require("code-preview.backends.opencode").install()
+  end, { desc = "Install code-preview plugin for OpenCode" })
 
   vim.api.nvim_create_user_command("CodePreviewUninstallOpenCodeHooks", function()
-    require("claude-preview.hooks").uninstall_opencode()
-  end, { desc = "Uninstall claude-preview plugin from OpenCode" })
+    require("code-preview.backends.opencode").uninstall()
+  end, { desc = "Uninstall code-preview plugin from OpenCode" })
 
-  vim.api.nvim_create_user_command("ClaudePreviewCloseDiff", function()
-    require("claude-preview.diff").close_diff_and_clear()
-  end, { desc = "Manually close claude-preview diff (use after rejecting a change)" })
+  vim.api.nvim_create_user_command("CodePreviewCloseDiff", function()
+    require("code-preview.diff").close_diff_and_clear()
+  end, { desc = "Manually close code-preview diff (use after rejecting a change)" })
 
-  vim.api.nvim_create_user_command("ClaudePreviewStatus", function()
+  vim.api.nvim_create_user_command("CodePreviewStatus", function()
     M.status()
-  end, { desc = "Show claude-preview status" })
+  end, { desc = "Show code-preview status" })
 
-  vim.api.nvim_create_user_command("ClaudePreviewToggleVisibleOnly", function()
+  vim.api.nvim_create_user_command("CodePreviewToggleVisibleOnly", function()
     M.config.diff.visible_only = not M.config.diff.visible_only
     vim.notify(
-      "claude-preview: visible_only = " .. tostring(M.config.diff.visible_only),
+      "code-preview: visible_only = " .. tostring(M.config.diff.visible_only),
       vim.log.levels.INFO,
-      { title = "claude-preview" }
+      { title = "code-preview" }
     )
   end, { desc = "Toggle visible_only — show diffs only for open buffers vs all files" })
 
+  -- ── Deprecated aliases (remove after one release cycle) ───────
+
+  deprecated_alias("ClaudePreviewInstallHooks", "CodePreviewInstallClaudeCodeHooks")
+  deprecated_alias("ClaudePreviewUninstallHooks", "CodePreviewUninstallClaudeCodeHooks")
+  deprecated_alias("ClaudePreviewCloseDiff", "CodePreviewCloseDiff")
+  deprecated_alias("ClaudePreviewStatus", "CodePreviewStatus")
+  deprecated_alias("ClaudePreviewToggleVisibleOnly", "CodePreviewToggleVisibleOnly")
+
   -- Neo-tree integration (soft dependency)
   if M.config.neo_tree.enabled then
-    require("claude-preview.neo_tree").setup(M.config)
+    require("code-preview.neo_tree").setup(M.config)
   end
 
   vim.keymap.set("n", "<leader>dq", function()
-    require("claude-preview.diff").close_diff_and_clear()
-  end, { desc = "Close claude-preview diff" })
+    require("code-preview.diff").close_diff_and_clear()
+  end, { desc = "Close code-preview diff" })
 end
 
 --- Query hook context for the PreToolUse shell script.
@@ -152,7 +173,7 @@ function M.hook_context(file_path)
 end
 
 function M.status()
-  local lines = { "claude-preview.nvim status", string.rep("─", 40) }
+  local lines = { "code-preview.nvim status", string.rep("─", 40) }
 
   -- Socket
   local socket = vim.env.NVIM_LISTEN_ADDRESS or ""
@@ -172,7 +193,9 @@ function M.status()
   if f then
     local content = f:read("*a")
     f:close()
-    hooks_ok = content:find("claude-preview-diff", 1, true) ~= nil
+    -- Detect both new and legacy hook markers
+    hooks_ok = content:find("code-preview", 1, true) ~= nil
+               or content:find("claude-preview", 1, true) ~= nil
   end
   table.insert(lines, "Hooks         : " .. (hooks_ok and "installed" or "not installed"))
 
@@ -181,10 +204,10 @@ function M.status()
   table.insert(lines, "jq            : " .. (jq_ok and "found" or "MISSING"))
 
   -- Diff tab open?
-  local diff = require("claude-preview.diff")
+  local diff = require("code-preview.diff")
   table.insert(lines, "Diff tab      : " .. (diff.is_open() and "open" or "closed"))
 
-  vim.notify(table.concat(lines, "\n"), vim.log.levels.INFO, { title = "claude-preview" })
+  vim.notify(table.concat(lines, "\n"), vim.log.levels.INFO, { title = "code-preview" })
 end
 
 return M

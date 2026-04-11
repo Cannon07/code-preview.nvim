@@ -3,7 +3,7 @@
 #
 # Usage:
 #   source bin/nvim-send.sh
-#   nvim_send "require('claude-preview.diff').show_diff('a', 'b', 'c')"
+#   nvim_send "require('code-preview.diff').show_diff('a', 'b', 'c')"
 #
 # Depends on nvim-socket.sh being sourced first (NVIM_SOCKET must be set).
 
@@ -24,7 +24,7 @@ nvim_send() {
     return 1
   fi
   local tmp_lua
-  tmp_lua="$(mktemp /tmp/claude-preview-nvim-cmd.XXXXXX)"
+  tmp_lua="$(mktemp /tmp/code-preview-nvim-cmd.XXXXXX)"
   printf '%s' "$lua_cmd" > "$tmp_lua"
   nvim --server "$NVIM_SOCKET" --remote-expr "execute('luafile $tmp_lua')" >/dev/null 2>&1
   local rc=$?

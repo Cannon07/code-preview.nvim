@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# helpers.sh — Shared test utilities for claude-preview.nvim E2E tests
+# helpers.sh — Shared test utilities for code-preview.nvim E2E tests
 #
 # Provides:
 #   start_nvim        — launch headless Neovim with the plugin on a known socket
@@ -17,7 +17,7 @@ set -euo pipefail
 # ── Paths ────────────────────────────────────────────────────────
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-TEST_SOCKET="${TMPDIR:-/tmp}/claude-preview-test-nvim.sock"
+TEST_SOCKET="${TMPDIR:-/tmp}/code-preview-test-nvim.sock"
 TEST_PROJECT_DIR=""
 NVIM_PID=""
 
@@ -38,7 +38,7 @@ TESTS_TOTAL=0
 # ── Test project setup ───────────────────────────────────────────
 
 setup_test_project() {
-  TEST_PROJECT_DIR="$(mktemp -d /tmp/claude-preview-test-project.XXXXXX)"
+  TEST_PROJECT_DIR="$(mktemp -d /tmp/code-preview-test-project.XXXXXX)"
   mkdir -p "$TEST_PROJECT_DIR"
   # Resolve symlinks so the path matches what lsof reports for nvim's cwd.
   # On macOS /tmp is a symlink to /private/tmp; without this the CWD-preference
@@ -59,7 +59,7 @@ cleanup_test_project() {
 # of each test function that touches diffs or changes.
 reset_test_state() {
   # Close any open diff and clear changes inside the running Neovim
-  nvim_exec "require('claude-preview.diff').close_diff_and_clear()" 2>/dev/null || true
+  nvim_exec "require('code-preview.diff').close_diff_and_clear()" 2>/dev/null || true
   # Remove temp files that persist across runs (shared by both backends)
   local _tmpdir="${TMPDIR:-/tmp}"
   rm -f "$_tmpdir/claude-diff-original" "$_tmpdir/claude-diff-proposed"
@@ -104,7 +104,7 @@ start_nvim_on_socket() {
     exec nvim --headless --clean --listen "$listen" \
       --cmd "cd $nvim_cwd" \
       --cmd "set rtp+=$repo_root" \
-      -c "lua require('\''claude-preview'\'').setup()"
+      -c "lua require('\''code-preview'\'').setup()"
   ' _ "$nvim_cwd" "$REPO_ROOT" &>/dev/null &
   NVIM_PID=$!
   TEST_SOCKET="/tmp/nvim.${NVIM_PID}/0"
@@ -175,8 +175,8 @@ nvim_eval() {
   local lua_expr="$1"
   local tmp_lua
   local tmp_out
-  tmp_lua="$(mktemp /tmp/claude-preview-test-eval.XXXXXX)"
-  tmp_out="/tmp/claude-preview-test-eval-out.$$"
+  tmp_lua="$(mktemp /tmp/code-preview-test-eval.XXXXXX)"
+  tmp_out="/tmp/code-preview-test-eval-out.$$"
 
   # Write Lua code that evaluates the expression and writes result to a temp file
   printf 'local __result = %s\nlocal __f = io.open("%s", "w")\n__f:write(tostring(__result))\n__f:close()' "$lua_expr" "$tmp_out" > "$tmp_lua"
@@ -199,7 +199,7 @@ nvim_eval() {
 nvim_exec() {
   local lua_cmd="$1"
   local tmp_lua
-  tmp_lua="$(mktemp /tmp/claude-preview-test-exec.XXXXXX)"
+  tmp_lua="$(mktemp /tmp/code-preview-test-exec.XXXXXX)"
   printf '%s' "$lua_cmd" > "$tmp_lua"
   nvim --server "$TEST_SOCKET" --remote-expr "execute('luafile $tmp_lua')" >/dev/null 2>&1
   local rc=$?
@@ -302,11 +302,11 @@ run_pretool_hook() {
   if [[ "$mode" == "scan" ]]; then
     echo "$json_payload" | \
       NVIM_LISTEN_ADDRESS= \
-      bash "$REPO_ROOT/bin/claude-preview-diff.sh" 2>/dev/null || true
+      bash "$REPO_ROOT/backends/claudecode/code-preview-diff.sh" 2>/dev/null || true
   else
     echo "$json_payload" | \
       NVIM_LISTEN_ADDRESS="$TEST_SOCKET" \
-      bash "$REPO_ROOT/bin/claude-preview-diff.sh" 2>/dev/null || true
+      bash "$REPO_ROOT/backends/claudecode/code-preview-diff.sh" 2>/dev/null || true
   fi
 }
 
@@ -318,10 +318,10 @@ run_posttool_hook() {
   if [[ "$mode" == "scan" ]]; then
     echo "$json_payload" | \
       NVIM_LISTEN_ADDRESS= \
-      bash "$REPO_ROOT/bin/claude-close-diff.sh" 2>/dev/null || true
+      bash "$REPO_ROOT/backends/claudecode/code-close-diff.sh" 2>/dev/null || true
   else
     echo "$json_payload" | \
       NVIM_LISTEN_ADDRESS="$TEST_SOCKET" \
-      bash "$REPO_ROOT/bin/claude-close-diff.sh" 2>/dev/null || true
+      bash "$REPO_ROOT/backends/claudecode/code-close-diff.sh" 2>/dev/null || true
   fi
 }

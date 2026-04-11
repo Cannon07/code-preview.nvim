@@ -2,8 +2,8 @@
 # test_edit.sh — E2E tests for Claude Code Edit/Write/MultiEdit workflows
 #
 # Tests the full pipeline:
-#   JSON payload → claude-preview-diff.sh → RPC → Neovim state
-#   JSON payload → claude-close-diff.sh  → RPC → cleanup
+#   JSON payload → code-preview-diff.sh → RPC → Neovim state
+#   JSON payload → code-close-diff.sh  → RPC → cleanup
 
 # ── Setup ────────────────────────────────────────────────────────
 
@@ -44,12 +44,12 @@ EOF
 
   # Diff tab should be open
   local is_open
-  is_open="$(nvim_eval "require('claude-preview.diff').is_open()")"
+  is_open="$(nvim_eval "require('code-preview.diff').is_open()")"
   assert_eq "true" "$is_open" "diff should be open after Edit PreToolUse" || return 1
 
   # Changes registry should have the file marked as modified
   local change_status
-  change_status="$(nvim_eval "require('claude-preview.changes').get('$test_file')")"
+  change_status="$(nvim_eval "require('code-preview.changes').get('$test_file')")"
   assert_eq "modified" "$change_status" "file should be marked as modified" || return 1
 
   # Proposed temp file should contain the edit result
@@ -64,12 +64,12 @@ EOF
   sleep 0.5
 
   local is_open_after
-  is_open_after="$(nvim_eval "require('claude-preview.diff').is_open()")"
+  is_open_after="$(nvim_eval "require('code-preview.diff').is_open()")"
   assert_eq "false" "$is_open_after" "diff should be closed after PostToolUse" || return 1
 
   # Changes should be cleared
   local changes_after
-  changes_after="$(nvim_eval "vim.tbl_count(require('claude-preview.changes').get_all())")"
+  changes_after="$(nvim_eval "vim.tbl_count(require('code-preview.changes').get_all())")"
   assert_eq "0" "$changes_after" "changes should be cleared after PostToolUse" || return 1
 }
 
@@ -100,12 +100,12 @@ EOF
   sleep 0.5
 
   local is_open
-  is_open="$(nvim_eval "require('claude-preview.diff').is_open()")"
+  is_open="$(nvim_eval "require('code-preview.diff').is_open()")"
   assert_eq "true" "$is_open" "diff should be open for Write tool" || return 1
 
   # New file should be marked as "created" (file doesn't exist on disk)
   local change_status
-  change_status="$(nvim_eval "require('claude-preview.changes').get('$new_file')")"
+  change_status="$(nvim_eval "require('code-preview.changes').get('$new_file')")"
   assert_eq "created" "$change_status" "new file should be marked as created" || return 1
 
   # Close
@@ -113,7 +113,7 @@ EOF
   sleep 0.5
 
   local is_open_after
-  is_open_after="$(nvim_eval "require('claude-preview.diff').is_open()")"
+  is_open_after="$(nvim_eval "require('code-preview.diff').is_open()")"
   assert_eq "false" "$is_open_after" "diff should be closed" || return 1
 }
 
@@ -145,7 +145,7 @@ EOF
   sleep 0.5
 
   local change_status
-  change_status="$(nvim_eval "require('claude-preview.changes').get('$test_file')")"
+  change_status="$(nvim_eval "require('code-preview.changes').get('$test_file')")"
   assert_eq "modified" "$change_status" "existing file should be marked as modified" || return 1
 
   run_posttool_hook "$payload" >/dev/null
@@ -177,7 +177,7 @@ EOF
 
   # File should be marked as deleted in changes registry
   local change_status
-  change_status="$(nvim_eval "require('claude-preview.changes').get('$test_file')")"
+  change_status="$(nvim_eval "require('code-preview.changes').get('$test_file')")"
   assert_eq "deleted" "$change_status" "rm target should be marked as deleted" || return 1
 
   # PostToolUse for Bash should clear deletion markers only
@@ -185,7 +185,7 @@ EOF
   sleep 0.5
 
   local change_after
-  change_after="$(nvim_eval "require('claude-preview.changes').get('$test_file') or 'nil'")"
+  change_after="$(nvim_eval "require('code-preview.changes').get('$test_file') or 'nil'")"
   assert_eq "nil" "$change_after" "deletion marker should be cleared after PostToolUse" || return 1
 }
 
@@ -210,7 +210,7 @@ EOF
   sleep 0.3
 
   local changes_count
-  changes_count="$(nvim_eval "vim.tbl_count(require('claude-preview.changes').get_all())")"
+  changes_count="$(nvim_eval "vim.tbl_count(require('code-preview.changes').get_all())")"
   assert_eq "0" "$changes_count" "non-rm bash should not set any changes" || return 1
 }
 
@@ -298,7 +298,7 @@ EOF
   run_pretool_hook "$payload1" >/dev/null
   sleep 0.5
   local is_open1
-  is_open1="$(nvim_eval "require('claude-preview.diff').is_open()")"
+  is_open1="$(nvim_eval "require('code-preview.diff').is_open()")"
   assert_eq "true" "$is_open1" "first diff should be open" || return 1
 
   run_posttool_hook "$payload1" >/dev/null
@@ -322,15 +322,88 @@ EOF
   run_pretool_hook "$payload2" >/dev/null
   sleep 0.5
   local is_open2
-  is_open2="$(nvim_eval "require('claude-preview.diff').is_open()")"
+  is_open2="$(nvim_eval "require('code-preview.diff').is_open()")"
   assert_eq "true" "$is_open2" "second diff should be open" || return 1
 
   run_posttool_hook "$payload2" >/dev/null
   sleep 0.5
 
   local is_open_final
-  is_open_final="$(nvim_eval "require('claude-preview.diff').is_open()")"
+  is_open_final="$(nvim_eval "require('code-preview.diff').is_open()")"
   assert_eq "false" "$is_open_final" "diff should be closed after both edits" || return 1
+}
+
+# ── Test: visible_only skips diff for non-open files ─────────────
+
+test_visible_only() {
+  reset_test_state
+
+  # Enable visible_only in the running Neovim
+  nvim_exec "require('code-preview').config.diff.visible_only = true"
+
+  local visible_file hidden_file
+  visible_file="$(create_test_file "src/visible.lua" 'local v = 1')"
+  hidden_file="$(create_test_file "src/hidden.lua" 'local h = 2')"
+
+  # Open visible_file in a Neovim window so hook_context() reports file_visible=true
+  nvim_exec "vim.cmd('edit $visible_file')"
+  sleep 0.2
+
+  # Pre-tool for the visible file — diff SHOULD open
+  local payload1
+  payload1=$(cat <<EOF
+{
+  "tool_name": "Edit",
+  "cwd": "$TEST_PROJECT_DIR",
+  "tool_input": {
+    "file_path": "$visible_file",
+    "old_string": "local v = 1",
+    "new_string": "local v = 99",
+    "replace_all": false
+  }
+}
+EOF
+)
+
+  run_pretool_hook "$payload1" >/dev/null
+  sleep 0.5
+
+  local is_open
+  is_open="$(nvim_eval "require('code-preview.diff').is_open()")"
+  if ! assert_eq "true" "$is_open" "diff should open for a buffer that is visible"; then
+    nvim_exec "require('code-preview').config.diff.visible_only = false"
+    return 1
+  fi
+
+  run_posttool_hook "$payload1" >/dev/null
+  sleep 0.3
+
+  # Pre-tool for the hidden file — diff should NOT open
+  local payload2
+  payload2=$(cat <<EOF
+{
+  "tool_name": "Edit",
+  "cwd": "$TEST_PROJECT_DIR",
+  "tool_input": {
+    "file_path": "$hidden_file",
+    "old_string": "local h = 2",
+    "new_string": "local h = 99",
+    "replace_all": false
+  }
+}
+EOF
+)
+
+  run_pretool_hook "$payload2" >/dev/null
+  sleep 0.5
+
+  local is_open2
+  is_open2="$(nvim_eval "require('code-preview.diff').is_open()")"
+
+  # Restore config before asserting so teardown is unaffected
+  nvim_exec "require('code-preview').config.diff.visible_only = false"
+
+  assert_eq "false" "$is_open2" "diff should be skipped for a file not open in any window" || return 1
 }
 
 # ── Run all tests ────────────────────────────────────────────────
@@ -343,6 +416,7 @@ run_test "Non-rm Bash command is ignored" test_bash_non_rm_passthrough
 run_test "Unknown tool is silently ignored" test_unknown_tool_passthrough
 run_test "Edit with replace_all replaces all occurrences" test_edit_replace_all
 run_test "Sequential edits open/close diff correctly" test_sequential_edits
+run_test "visible_only skips diff for files not open in Neovim" test_visible_only
 
 # ── Teardown ─────────────────────────────────────────────────────
 

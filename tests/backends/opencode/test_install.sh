@@ -12,7 +12,7 @@ nvim_exec "vim.cmd('cd $TEST_PROJECT_DIR')"
 # ── Test: Install OpenCode plugin ────────────────────────────────
 
 test_install_opencode() {
-  nvim_exec "require('claude-preview.hooks').install_opencode()"
+  nvim_exec "require('code-preview.backends.opencode').install()"
   sleep 0.3
 
   local target_dir="$TEST_PROJECT_DIR/.opencode/plugins"
@@ -26,11 +26,11 @@ test_install_opencode() {
 
 test_uninstall_opencode() {
   # Install first
-  nvim_exec "require('claude-preview.hooks').install_opencode()"
+  nvim_exec "require('code-preview.backends.opencode').install()"
   sleep 0.2
 
   # Uninstall
-  nvim_exec "require('claude-preview.hooks').uninstall_opencode()"
+  nvim_exec "require('code-preview.backends.opencode').uninstall()"
   sleep 0.2
 
   local target_dir="$TEST_PROJECT_DIR/.opencode/plugins"

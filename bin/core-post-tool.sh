@@ -9,7 +9,7 @@
 #     "tool_input": { "file_path": "...", ... } }
 #
 # Environment:
-#   CLAUDE_PREVIEW_BACKEND  — "claude" or "opencode" (currently unused, reserved)
+#   CODE_PREVIEW_BACKEND  — "claudecode" or "opencode" (currently unused, reserved)
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
@@ -24,8 +24,8 @@ source "$SCRIPT_DIR/nvim-send.sh"
 
 # For Bash tool (rm detection), only clear deletion markers — don't touch edit markers or diff tab
 if [[ "$TOOL_NAME" == "Bash" ]]; then
-  nvim_send "require('claude-preview.changes').clear_by_status('deleted')" || true
-  nvim_send "vim.defer_fn(function() pcall(function() require('claude-preview.neo_tree').refresh() end) end, 200)" || true
+  nvim_send "require('code-preview.changes').clear_by_status('deleted')" || true
+  nvim_send "vim.defer_fn(function() pcall(function() require('code-preview.neo_tree').refresh() end) end, 200)" || true
   exit 0
 fi
 
@@ -36,15 +36,15 @@ FILE_PATH_ESC="$(escape_lua "${FILE_PATH:-}")"
 # Only clean up if a diff for THIS file is actually open.
 # OpenCode fires all before-hooks before any after-hooks, so the open diff
 # may belong to a different file — closing it would kill the wrong preview.
-DIFF_OPEN=$(nvim --server "$NVIM_SOCKET" --remote-expr "luaeval(\"require('claude-preview.diff').is_open('${FILE_PATH_ESC}')\")" 2>/dev/null || echo "false")
+DIFF_OPEN=$(nvim --server "$NVIM_SOCKET" --remote-expr "luaeval(\"require('code-preview.diff').is_open('${FILE_PATH_ESC}')\")" 2>/dev/null || echo "false")
 
 if [[ "$DIFF_OPEN" == "true" ]]; then
-  nvim_send "require('claude-preview.changes').clear_all()" || true
-  nvim_send "require('claude-preview.diff').close_diff()" || true
+  nvim_send "require('code-preview.changes').clear_all()" || true
+  nvim_send "require('code-preview.diff').close_diff()" || true
   if [[ -n "$FILE_PATH" ]]; then
-    nvim_send "vim.defer_fn(function() pcall(function() require('claude-preview.neo_tree').refresh() end) vim.defer_fn(function() pcall(function() require('claude-preview.neo_tree').reveal('$FILE_PATH_ESC') end) end, 200) end, 200)" || true
+    nvim_send "vim.defer_fn(function() pcall(function() require('code-preview.neo_tree').refresh() end) vim.defer_fn(function() pcall(function() require('code-preview.neo_tree').reveal('$FILE_PATH_ESC') end) end, 200) end, 200)" || true
   else
-    nvim_send "vim.defer_fn(function() pcall(function() require('claude-preview.neo_tree').refresh() end) end, 200)" || true
+    nvim_send "vim.defer_fn(function() pcall(function() require('code-preview.neo_tree').refresh() end) end, 200)" || true
   fi
 fi
 

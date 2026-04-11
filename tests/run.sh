@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# run.sh — Main test runner for claude-preview.nvim E2E tests
+# run.sh — Main test runner for code-preview.nvim E2E tests
 #
 # Usage:
 #   ./tests/run.sh                      # run all tests (plugin + backends)
@@ -116,7 +116,7 @@ main() {
 
   echo ""
   echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-  echo -e "${CYAN}claude-preview.nvim E2E Test Suite${NC}"
+  echo -e "${CYAN}code-preview.nvim E2E Test Suite${NC}"
   echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
   echo ""
 

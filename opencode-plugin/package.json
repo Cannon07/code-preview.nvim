@@ -1,6 +1,0 @@
-{
-  "name": "claude-preview-opencode",
-  "version": "1.0.0",
-  "description": "OpenCode plugin for claude-preview.nvim — sends diff previews to Neovim",
-  "type": "module"
-}

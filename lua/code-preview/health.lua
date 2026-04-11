@@ -10,7 +10,7 @@ function M.check()
 
   -- ── Common ────────────────────────────────────────────────────
 
-  start("claude-preview.nvim")
+  start("code-preview.nvim")
 
   -- Neovim RPC socket (required for both backends)
   local socket = vim.v.servername or ""
@@ -21,7 +21,7 @@ function M.check()
   end
 
   -- Diff layout
-  local cfg = require("claude-preview").config or {}
+  local cfg = require("code-preview").config or {}
   local layout = (cfg.diff and cfg.diff.layout) or "unknown"
   ok("Diff layout: " .. layout)
 
@@ -40,11 +40,27 @@ function M.check()
   local src = debug.getinfo(1, "S").source
   local lua_file = src:sub(2)
   local lua_dir  = vim.fn.fnamemodify(lua_file, ":h")
-  local bin      = vim.fn.fnamemodify(lua_dir, ":h:h") .. "/bin"
+  local plugin_root = vim.fn.fnamemodify(lua_dir, ":h:h")
+  local bin = plugin_root .. "/bin"
+  local claudecode_dir = plugin_root .. "/backends/claudecode"
 
+  -- Claude Code adapter scripts
   for _, script in ipairs({
-    "claude-preview-diff.sh",
-    "claude-close-diff.sh",
+    "code-preview-diff.sh",
+    "code-close-diff.sh",
+  }) do
+    local path = claudecode_dir .. "/" .. script
+    if vim.fn.filereadable(path) == 1 and vim.fn.executable(path) == 1 then
+      ok(script .. " is executable")
+    elseif vim.fn.filereadable(path) == 1 then
+      warn(script .. " exists but is not executable (run: chmod +x " .. path .. ")")
+    else
+      error(script .. " not found at " .. path)
+    end
+  end
+
+  -- Shared scripts
+  for _, script in ipairs({
     "nvim-socket.sh",
     "nvim-send.sh",
     "apply-edit.lua",
@@ -64,7 +80,7 @@ function M.check()
   local settings = vim.fn.getcwd() .. "/.claude/settings.local.json"
   local f = io.open(settings, "r")
   if not f then
-    warn(".claude/settings.local.json not found — run :ClaudePreviewInstallHooks")
+    warn(".claude/settings.local.json not found — run :CodePreviewInstallClaudeCodeHooks")
   else
     local raw = f:read("*a")
     f:close()
@@ -72,20 +88,28 @@ function M.check()
     if not parsed_ok then
       error(".claude/settings.local.json is invalid JSON")
     elseif not (data.hooks and data.hooks.PreToolUse) then
-      warn(".claude/settings.local.json exists but claude-preview hooks are not installed")
+      warn(".claude/settings.local.json exists but code-preview hooks are not installed")
     else
-      local found = false
+      local found_new = false
+      local found_legacy = false
       for _, entry in ipairs(data.hooks.PreToolUse) do
-        if entry.hooks and entry.hooks[1] and
-           tostring(entry.hooks[1].command or ""):find("claude-preview", 1, true) then
-          found = true
+        local cmd = ""
+        if entry.hooks and entry.hooks[1] then
+          cmd = tostring(entry.hooks[1].command or "")
+        end
+        if cmd:find("code-preview", 1, true) then
+          found_new = true
           break
+        elseif cmd:find("claude-preview", 1, true) then
+          found_legacy = true
         end
       end
-      if found then
+      if found_new then
         ok("Claude Code hooks are installed")
+      elseif found_legacy then
+        warn("Legacy claude-preview hooks detected — run :CodePreviewInstallClaudeCodeHooks to update")
       else
-        warn("claude-preview hooks not found — run :ClaudePreviewInstallHooks")
+        warn("code-preview hooks not found — run :CodePreviewInstallClaudeCodeHooks")
       end
     end
   end

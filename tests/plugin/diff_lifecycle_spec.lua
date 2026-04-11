@@ -1,7 +1,7 @@
 -- diff_lifecycle_spec.lua — Tests for the diff module lifecycle
 
-local diff = require("claude-preview.diff")
-local changes = require("claude-preview.changes")
+local diff = require("code-preview.diff")
+local changes = require("code-preview.changes")
 
 -- Helper: write a temp file with content and return the path
 local function tmp_file(name, content)
@@ -147,5 +147,84 @@ describe("diff lifecycle", function()
     os.remove(prop1)
     os.remove(orig2)
     os.remove(prop2)
+  end)
+end)
+
+describe("diff layouts", function()
+  -- Temporarily override the diff layout for one test, restoring it afterwards.
+  local function with_layout(layout, fn)
+    local saved = require("code-preview").config.diff.layout
+    require("code-preview").config.diff.layout = layout
+    local ok, err = pcall(fn)
+    require("code-preview").config.diff.layout = saved
+    if not ok then error(err, 2) end
+  end
+
+  before_each(function()
+    changes.clear_all()
+    diff.close_diff()
+  end)
+
+  it("tab layout creates a new tab with two side-by-side windows", function()
+    local orig = tmp_file("tab_orig.txt", "line1\nline2")
+    local prop = tmp_file("tab_prop.txt", "line1\nchanged")
+
+    local tabs_before = #vim.api.nvim_list_tabpages()
+
+    with_layout("tab", function()
+      diff.show_diff(orig, prop, "layout_tab.txt")
+    end)
+
+    assert.is_true(diff.is_open())
+    -- A new tab should have been opened
+    assert.equals(tabs_before + 1, #vim.api.nvim_list_tabpages())
+    -- The diff tab should have exactly 2 windows: CURRENT and PROPOSED
+    local diff_tabpage = vim.api.nvim_get_current_tabpage()
+    assert.equals(2, #vim.api.nvim_tabpage_list_wins(diff_tabpage))
+
+    diff.close_diff()
+    os.remove(orig)
+    os.remove(prop)
+  end)
+
+  it("vsplit layout opens two windows in the current tab without creating a new tab", function()
+    local orig = tmp_file("vs_orig.txt", "alpha\nbeta")
+    local prop = tmp_file("vs_prop.txt", "alpha\ngamma")
+
+    local tabs_before = #vim.api.nvim_list_tabpages()
+
+    with_layout("vsplit", function()
+      diff.show_diff(orig, prop, "layout_vsplit.txt")
+    end)
+
+    assert.is_true(diff.is_open())
+    -- vsplit must NOT open a new tab
+    assert.equals(tabs_before, #vim.api.nvim_list_tabpages())
+
+    diff.close_diff()
+    os.remove(orig)
+    os.remove(prop)
+  end)
+
+  it("inline layout creates a new tab with a single buffer (no side-by-side split)", function()
+    local orig = tmp_file("il_orig.txt", "hello\nworld")
+    local prop = tmp_file("il_prop.txt", "hello\nearth")
+
+    local tabs_before = #vim.api.nvim_list_tabpages()
+
+    with_layout("inline", function()
+      diff.show_diff(orig, prop, "layout_inline.txt")
+    end)
+
+    assert.is_true(diff.is_open())
+    -- inline also opens in a new tab
+    assert.equals(tabs_before + 1, #vim.api.nvim_list_tabpages())
+    -- But only ONE window — no CURRENT/PROPOSED split
+    local diff_tabpage = vim.api.nvim_get_current_tabpage()
+    assert.equals(1, #vim.api.nvim_tabpage_list_wins(diff_tabpage))
+
+    diff.close_diff()
+    os.remove(orig)
+    os.remove(prop)
   end)
 end)

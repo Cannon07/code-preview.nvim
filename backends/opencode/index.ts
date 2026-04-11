@@ -21,7 +21,7 @@ function binDir(): string {
     return readFileSync(resolve(__dirname, "bin-path.txt"), "utf-8").trim()
   } catch {
     // Fallback for development: resolve relative to plugin source
-    return resolve(__dirname, "../bin")
+    return resolve(__dirname, "../../bin")
   }
 }
 
@@ -85,7 +85,7 @@ function runCoreScript(script: string, json: string): void {
   try {
     execSync(`"${bin}/${script}"`, {
       input: json,
-      env: { ...process.env, CLAUDE_PREVIEW_BACKEND: "opencode" },
+      env: { ...process.env, CODE_PREVIEW_BACKEND: "opencode" },
       timeout: 15000,
       stdio: ["pipe", "pipe", "pipe"],
     })

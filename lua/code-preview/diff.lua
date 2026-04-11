@@ -294,7 +294,7 @@ local function show_inline_diff(original_path, proposed_path, real_file_path, cf
   vim.wo[win].wrap = false
   vim.wo[win].cursorline = true
   vim.wo[win].signcolumn = "no"
-  vim.wo[win].statuscolumn = "%!v:lua.require('claude-preview.diff').inline_statuscolumn(" .. col_width .. ")"
+  vim.wo[win].statuscolumn = "%!v:lua.require('code-preview.diff').inline_statuscolumn(" .. col_width .. ")"
 
   diff_bufs = { buf }
 
@@ -362,7 +362,7 @@ function M.show_diff(original_path, proposed_path, real_file_path, abs_file_path
   -- real_file_path is the display name shown in the winbar.
   diff_file_path = abs_file_path or real_file_path
 
-  local cfg = require("claude-preview").config
+  local cfg = require("code-preview").config
 
   -- Inline layout: single-buffer unified diff
   if cfg.diff.layout == "inline" then
@@ -434,7 +434,7 @@ function M.show_diff(original_path, proposed_path, real_file_path, abs_file_path
   end
 
   -- Re-equalize when terminal is resized (e.g. tmux pane zoom/unzoom)
-  diff_augroup = vim.api.nvim_create_augroup("ClaudePreviewDiffResize", { clear = true })
+  diff_augroup = vim.api.nvim_create_augroup("CodePreviewDiffResize", { clear = true })
   vim.api.nvim_create_autocmd("VimResized", {
     group = diff_augroup,
     callback = function()
@@ -513,8 +513,8 @@ end
 function M.close_diff_and_clear()
   diff_queue = {}  -- discard pending diffs on manual close
   M.close_diff()
-  pcall(function() require("claude-preview.changes").clear_all() end)
-  pcall(function() require("claude-preview.neo_tree").refresh() end)
+  pcall(function() require("code-preview.changes").clear_all() end)
+  pcall(function() require("code-preview.neo_tree").refresh() end)
 end
 
 return M

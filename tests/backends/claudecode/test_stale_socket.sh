@@ -39,7 +39,7 @@ EOF
   run_pretool_hook "$payload" scan >/dev/null
   sleep 0.5
   local is_open
-  is_open="$(nvim_eval "require('claude-preview.diff').is_open()")"
+  is_open="$(nvim_eval "require('code-preview.diff').is_open()")"
   assert_eq "true" "$is_open" "diff should open on first instance" || return 1
 
   run_posttool_hook "$payload" scan >/dev/null
@@ -82,7 +82,7 @@ EOF
   sleep 0.5
 
   local is_open2
-  is_open2="$(nvim_eval "require('claude-preview.diff').is_open()")"
+  is_open2="$(nvim_eval "require('code-preview.diff').is_open()")"
   assert_eq "true" "$is_open2" "diff should open on second (restarted) instance" || return 1
 
   run_posttool_hook "$payload2" scan >/dev/null
@@ -125,7 +125,7 @@ EOF
   echo "$payload" | \
     NVIM_LISTEN_ADDRESS= \
     TMPDIR="$hook_tmpdir" \
-    bash "$REPO_ROOT/bin/claude-preview-diff.sh" >/dev/null 2>&1 || exit_code=$?
+    bash "$REPO_ROOT/backends/claudecode/code-preview-diff.sh" >/dev/null 2>&1 || exit_code=$?
 
   # The hook exits 0 on non-crash paths, including when it cannot identify a
   # project-specific nvim instance.

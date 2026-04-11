@@ -1,6 +1,6 @@
 local M = {}
 
-local changes = require("claude-preview.changes")
+local changes = require("code-preview.changes")
 
 -- Guard: all neo-tree interaction goes through pcall
 local has_neo_tree = false
@@ -72,11 +72,11 @@ local function wrap_name_component(state)
       local lookup = s.claude_status_lookup or {}
       local status = resolve_status(lookup, node.path)
       if node._claude_virtual or status == "created" then
-        result.highlight = "ClaudePreviewTreeVirtual"
+        result.highlight = "CodePreviewTreeVirtual"
       elseif status == "modified" then
-        result.highlight = "ClaudePreviewTreeModified"
+        result.highlight = "CodePreviewTreeModified"
       elseif status == "deleted" then
-        result.highlight = "ClaudePreviewTreeDeleted"
+        result.highlight = "CodePreviewTreeDeleted"
       end
     end
     return result
@@ -125,17 +125,17 @@ local function inject_status_component(state, symbols)
     if node._claude_virtual or status == "created" then
       return {
         text = (symbols.created or "") .. " ",
-        highlight = "ClaudePreviewTreeCreated",
+        highlight = "CodePreviewTreeCreated",
       }
     elseif status == "modified" then
       return {
         text = (symbols.modified or "󰏫") .. " ",
-        highlight = "ClaudePreviewTreeModified",
+        highlight = "CodePreviewTreeModified",
       }
     elseif status == "deleted" then
       return {
         text = (symbols.deleted or "󰆴") .. " ",
-        highlight = "ClaudePreviewTreeDeleted",
+        highlight = "CodePreviewTreeDeleted",
       }
     end
     return {}
@@ -285,10 +285,10 @@ function M.setup(cfg)
   local highlights = cfg.neo_tree.highlights
 
   -- Define highlight groups from config
-  define_hl("ClaudePreviewTreeModified", highlights.modified)
-  define_hl("ClaudePreviewTreeCreated", highlights.created)
-  define_hl("ClaudePreviewTreeDeleted", highlights.deleted)
-  define_hl("ClaudePreviewTreeVirtual", highlights.created, { italic = true })
+  define_hl("CodePreviewTreeModified", highlights.modified)
+  define_hl("CodePreviewTreeCreated", highlights.created)
+  define_hl("CodePreviewTreeDeleted", highlights.deleted)
+  define_hl("CodePreviewTreeVirtual", highlights.created, { italic = true })
 
   -- Subscribe to BEFORE_RENDER to inject our lookup and components
   neo_tree_events.subscribe({
@@ -350,7 +350,7 @@ function M.reveal(filepath, dir)
     return
   end
   pcall(function()
-    local cfg = require("claude-preview").config
+    local cfg = require("code-preview").config
     local position = cfg.neo_tree.position or "right"
     local opts = {
       action = "show",

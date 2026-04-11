@@ -1,6 +1,6 @@
 -- changes_registry_spec.lua — Tests for the changes registry module
 
-local changes = require("claude-preview.changes")
+local changes = require("code-preview.changes")
 
 describe("changes registry", function()
   before_each(function()

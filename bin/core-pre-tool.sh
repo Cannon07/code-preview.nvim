@@ -10,7 +10,7 @@
 #     "tool_input": { "file_path": "...", ... } }
 #
 # Environment:
-#   CLAUDE_PREVIEW_BACKEND  — "claude" or "opencode" (gates output format)
+#   CODE_PREVIEW_BACKEND  — "claudecode" or "opencode" (gates output format)
 
 set -euo pipefail
 
@@ -121,13 +121,13 @@ case "$TOOL_NAME" in
     if [[ "$HAS_NVIM" == "true" ]]; then
       for path in $RM_PATHS; do
         PATH_ESC="$(escape_lua "$path")"
-        nvim_send "require('claude-preview.changes').set('$PATH_ESC', 'deleted')" || true
+        nvim_send "require('code-preview.changes').set('$PATH_ESC', 'deleted')" || true
       done
-      nvim_send "pcall(function() require('claude-preview.neo_tree').refresh() end)" || true
+      nvim_send "pcall(function() require('code-preview.neo_tree').refresh() end)" || true
       # Reveal the first deleted file in the tree
       FIRST_PATH="$(echo "$RM_PATHS" | awk '{print $1}')"
       FIRST_ESC="$(escape_lua "$FIRST_PATH")"
-      nvim_send "vim.defer_fn(function() pcall(function() require('claude-preview.neo_tree').reveal('$FIRST_ESC') end) end, 300)" || true
+      nvim_send "vim.defer_fn(function() pcall(function() require('code-preview.neo_tree').reveal('$FIRST_ESC') end) end, 300)" || true
     fi
     exit 0
     ;;
@@ -153,7 +153,7 @@ if [[ "$HAS_NVIM" == "true" ]]; then
   FILE_PATH_ESC="$(escape_lua "$FILE_PATH")"
 
   # Query config + file visibility from nvim in a single RPC call
-  HOOK_CTX=$(nvim --server "$NVIM_SOCKET" --remote-expr "luaeval(\"require('claude-preview').hook_context('${FILE_PATH_ESC}')\")" 2>/dev/null || echo '{}')
+  HOOK_CTX=$(nvim --server "$NVIM_SOCKET" --remote-expr "luaeval(\"require('code-preview').hook_context('${FILE_PATH_ESC}')\")" 2>/dev/null || echo '{}')
   # Use explicit conditional: jq's `//` operator treats boolean false like null,
   # which would silently convert `reveal = false` into `true`.
   NEO_TREE_REVEAL=$(echo "$HOOK_CTX" | jq -r 'if .neo_tree_reveal == false then "false" else "true" end')
@@ -177,7 +177,7 @@ if [[ "$HAS_NVIM" == "true" ]]; then
   fi
 
   if [[ "$SHOULD_SHOW" == "1" ]]; then
-    nvim_send "require('claude-preview.changes').set('$FILE_PATH_ESC', '$CHANGE_STATUS')" || true
+    nvim_send "require('code-preview.changes').set('$FILE_PATH_ESC', '$CHANGE_STATUS')" || true
 
     # Neo-tree integration (gated by config)
     if [[ "$NEO_TREE_REVEAL" == "true" ]]; then
@@ -204,17 +204,17 @@ if [[ "$HAS_NVIM" == "true" ]]; then
       fi
       REVEAL_TARGET_ESC="$(escape_lua "$REVEAL_TARGET")"
 
-      nvim_send "pcall(function() require('claude-preview.neo_tree').refresh() end)" || true
+      nvim_send "pcall(function() require('code-preview.neo_tree').refresh() end)" || true
 
       if [[ -n "$REVEAL_DIR" ]]; then
         REVEAL_DIR_ESC="$(escape_lua "$REVEAL_DIR")"
-        nvim_send "vim.defer_fn(function() pcall(function() require('claude-preview.neo_tree').reveal('$REVEAL_TARGET_ESC', '$REVEAL_DIR_ESC') end) end, 300)" || true
+        nvim_send "vim.defer_fn(function() pcall(function() require('code-preview.neo_tree').reveal('$REVEAL_TARGET_ESC', '$REVEAL_DIR_ESC') end) end, 300)" || true
       else
-        nvim_send "vim.defer_fn(function() pcall(function() require('claude-preview.neo_tree').reveal('$REVEAL_TARGET_ESC') end) end, 300)" || true
+        nvim_send "vim.defer_fn(function() pcall(function() require('code-preview.neo_tree').reveal('$REVEAL_TARGET_ESC') end) end, 300)" || true
       fi
     fi
 
-    nvim_send "require('claude-preview.diff').show_diff('$ORIG_ESC', '$PROP_ESC', '$DISPLAY_ESC', '$FILE_PATH_ESC')" || true
+    nvim_send "require('code-preview.diff').show_diff('$ORIG_ESC', '$PROP_ESC', '$DISPLAY_ESC', '$FILE_PATH_ESC')" || true
   fi
 fi
 
@@ -224,7 +224,7 @@ fi
 # unreachable), produce no output and let Claude Code's own permission
 # settings (bypass, ask, allowlist) decide. Otherwise return "ask" to
 # prompt the user for every edit, preserving the default review workflow.
-if [[ "${CLAUDE_PREVIEW_BACKEND:-}" == "claude" && "$HAS_NVIM" == "true" && "$DEFER_PERMISSIONS" != "true" ]]; then
+if [[ "${CODE_PREVIEW_BACKEND:-}" == "claudecode" && "$HAS_NVIM" == "true" && "$DEFER_PERMISSIONS" != "true" ]]; then
   REASON="Diff preview sent to Neovim. Review before accepting."
   printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask","permissionDecisionReason":"%s"}}\n' "$REASON"
 fi

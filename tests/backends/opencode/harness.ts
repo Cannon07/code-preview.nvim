@@ -30,7 +30,7 @@ async function main() {
   process.env.NVIM_LISTEN_ADDRESS = socket
 
   // Dynamic import of the plugin (it's the default export)
-  const pluginModule = await import(resolve(__dirname, "../../../opencode-plugin/index.ts"))
+  const pluginModule = await import(resolve(__dirname, "../../../backends/opencode/index.ts"))
   const pluginFactory = pluginModule.default
 
   // Initialize the plugin with the project directory

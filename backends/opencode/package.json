@@ -1,0 +1,6 @@
+{
+  "name": "code-preview-opencode",
+  "version": "1.0.0",
+  "description": "OpenCode plugin for code-preview.nvim — sends diff previews to Neovim",
+  "type": "module"
+}

@@ -65,7 +65,7 @@ Supports [Claude Code](https://docs.anthropic.com/en/docs/claude-code) and [Open
 {
   "Cannon07/claude-preview.nvim",
   config = function()
-    require("claude-preview").setup()
+    require("code-preview").setup()
   end,
 }
 ```
@@ -74,7 +74,7 @@ Supports [Claude Code](https://docs.anthropic.com/en/docs/claude-code) and [Open
 
 ```lua
 vim.opt.rtp:prepend("/path/to/claude-preview.nvim")
-require("claude-preview").setup()
+require("code-preview").setup()
 ```
 
 ---
@@ -85,7 +85,7 @@ require("claude-preview").setup()
 
 1. Install the plugin and call `setup()`
 2. Open a project in Neovim
-3. Run `:ClaudePreviewInstallHooks` — writes hooks to `.claude/settings.local.json`
+3. Run `:CodePreviewInstallClaudeCodeHooks` — writes hooks to `.claude/settings.local.json`
 4. Restart Claude Code CLI in the project directory
 5. Ask Claude to edit a file — a diff opens automatically in Neovim
 6. Accept/reject in the CLI; the diff closes automatically on accept
@@ -141,7 +141,7 @@ Both backends communicate with Neovim via RPC (`nvim --server <socket> --remote-
 All options with defaults:
 
 ```lua
-require("claude-preview").setup({
+require("code-preview").setup({
   diff = {
     layout   = "tab",    -- "tab" (new tab) | "vsplit" (current tab) | "inline" (GitHub-style)
     labels   = { current = "CURRENT", proposed = "PROPOSED" },
@@ -178,25 +178,28 @@ require("claude-preview").setup({
 
 | Command | Description |
 |---------|-------------|
-| `:ClaudePreviewInstallHooks` | Install Claude Code hooks to `.claude/settings.local.json` |
-| `:ClaudePreviewUninstallHooks` | Remove Claude Code hooks (leaves other hooks intact) |
+| `:CodePreviewInstallClaudeCodeHooks` | Install Claude Code hooks to `.claude/settings.local.json` |
+| `:CodePreviewUninstallClaudeCodeHooks` | Remove Claude Code hooks (leaves other hooks intact) |
 | `:CodePreviewInstallOpenCodeHooks` | Install OpenCode plugin to `.opencode/plugins/` |
 | `:CodePreviewUninstallOpenCodeHooks` | Remove OpenCode plugin |
-| `:ClaudePreviewCloseDiff` | Manually close the diff (use after rejecting a change) |
-| `:ClaudePreviewStatus` | Show socket path, hook status, and dependency check |
-| `:checkhealth claude-preview` | Full health check (both backends) |
+| `:CodePreviewCloseDiff` | Manually close the diff (use after rejecting a change) |
+| `:CodePreviewStatus` | Show socket path, hook status, and dependency check |
+| `:CodePreviewToggleVisibleOnly` | Toggle visible_only — show diffs only for open buffers |
+| `:checkhealth code-preview` | Full health check (both backends) |
+
+> **Migrating?** The old `:ClaudePreview*` commands still work but show a deprecation warning. They will be removed in a future release.
 
 ## Keymaps
 
 | Key | Description |
 |-----|-------------|
-| `<leader>dq` | Close the diff (same as `:ClaudePreviewCloseDiff`) |
+| `<leader>dq` | Close the diff (same as `:CodePreviewCloseDiff`) |
 
 ---
 
 ## Diff Layouts
 
-claude-preview supports three diff layouts, configured via `diff.layout`:
+code-preview supports three diff layouts, configured via `diff.layout`:
 
 | Layout | Description |
 |--------|-------------|
@@ -214,7 +217,7 @@ claude-preview supports three diff layouts, configured via `diff.layout`:
 To use inline diff:
 
 ```lua
-require("claude-preview").setup({
+require("code-preview").setup({
   diff = { layout = "inline" },
 })
 ```
@@ -223,7 +226,7 @@ require("claude-preview").setup({
 
 ## Neo-tree Integration (Optional)
 
-If you use [neo-tree.nvim](https://github.com/nvim-neo-tree/neo-tree.nvim), claude-preview will automatically decorate your file tree with visual indicators when changes are proposed. No extra configuration is required — it works out of the box.
+If you use [neo-tree.nvim](https://github.com/nvim-neo-tree/neo-tree.nvim), code-preview will automatically decorate your file tree with visual indicators when changes are proposed. No extra configuration is required — it works out of the box.
 
 ![neo-tree integration demo](docs/claude-preview-neotree-integration.gif)
 
@@ -246,7 +249,7 @@ Additional behaviors:
 All neo-tree options with defaults:
 
 ```lua
-require("claude-preview").setup({
+require("code-preview").setup({
   neo_tree = {
     enabled = true,             -- set false to disable neo-tree integration
     position = "right",         -- neo-tree window position: "left", "right", "float"
@@ -272,24 +275,30 @@ require("claude-preview").setup({
 
 ```
 claude-preview.nvim/
-├── lua/claude-preview/
-│   ├── init.lua        setup(), config, commands
-│   ├── diff.lua        show_diff(), close_diff()
-│   ├── hooks.lua       install/uninstall for both backends
-│   ├── changes.lua     change status registry (modified/created/deleted)
-│   ├── neo_tree.lua    neo-tree integration (icons, virtual nodes, reveal)
-│   └── health.lua      :checkhealth (both backends)
-├── bin/                          Claude Code hook scripts
-│   ├── claude-preview-diff.sh    PreToolUse hook entry point
-│   ├── claude-close-diff.sh      PostToolUse hook entry point
-│   ├── nvim-socket.sh            Neovim socket discovery
-│   ├── nvim-send.sh              RPC send helper
-│   ├── apply-edit.lua            Single Edit transformer
-│   └── apply-multi-edit.lua      MultiEdit transformer
-└── opencode-plugin/              OpenCode plugin
-    ├── index.ts                  tool.execute.before/after hooks
-    ├── nvim.ts                   Neovim socket discovery + RPC
-    └── edits.ts                  Edit computation helpers
+├── lua/code-preview/
+│   ├── init.lua                     setup(), config, commands
+│   ├── diff.lua                     show_diff(), close_diff()
+│   ├── changes.lua                  change status registry (modified/created/deleted)
+│   ├── neo_tree.lua                 neo-tree integration (icons, virtual nodes, reveal)
+│   ├── health.lua                   :checkhealth (both backends)
+│   └── backends/
+│       ├── claudecode.lua           Claude Code hook install/uninstall
+│       └── opencode.lua             OpenCode plugin install/uninstall
+├── bin/                             Shared core scripts
+│   ├── core-pre-tool.sh             Unified PreToolUse logic
+│   ├── core-post-tool.sh            Unified PostToolUse logic
+│   ├── nvim-socket.sh               Neovim socket discovery
+│   ├── nvim-send.sh                 RPC send helper
+│   ├── apply-edit.lua               Single Edit transformer
+│   └── apply-multi-edit.lua         MultiEdit transformer
+├── backends/
+│   ├── claudecode/                  Claude Code adapter
+│   │   ├── code-preview-diff.sh     PreToolUse hook entry point
+│   │   └── code-close-diff.sh       PostToolUse hook entry point
+│   └── opencode/                    OpenCode adapter
+│       ├── index.ts                 tool.execute.before/after hooks
+│       ├── package.json
+│       └── tsconfig.json
 ```
 
 ---
@@ -299,11 +308,11 @@ claude-preview.nvim/
 The test suite uses [plenary.nvim](https://github.com/nvim-lua/plenary.nvim) for core plugin tests and shell scripts for backend integration tests. CI runs on both Ubuntu and macOS.
 
 ```bash
-./tests/run.sh                      # all tests (plugin + backends)
-./tests/run.sh plugin               # core plugin tests only (plenary busted)
-./tests/run.sh backends             # all backend integration tests
-./tests/run.sh backends/claude      # Claude Code backend only
-./tests/run.sh backends/opencode    # OpenCode backend only
+./tests/run.sh                          # all tests (plugin + backends)
+./tests/run.sh plugin                   # core plugin tests only (plenary busted)
+./tests/run.sh backends                 # all backend integration tests
+./tests/run.sh backends/claudecode      # Claude Code backend only
+./tests/run.sh backends/opencode        # OpenCode backend only
 ```
 
 **Dependencies:** Neovim >= 0.10, jq, bun (for OpenCode tests). Plenary is auto-installed to `deps/` on first run.
@@ -325,12 +334,12 @@ vim.api.nvim_create_autocmd({ "FocusGained", "BufEnter", "CursorHold" }, {
 ## Troubleshooting
 
 **Diff doesn't open**
-- Run `:ClaudePreviewStatus` — check that `Neovim socket` is found
-- Run `:checkhealth claude-preview` — check for missing dependencies
+- Run `:CodePreviewStatus` — check that `Neovim socket` is found
+- Run `:checkhealth code-preview` — check for missing dependencies
 - Restart the CLI agent after installing hooks (hooks are read at startup)
 
 **Claude Code hooks not firing**
-- Run `:ClaudePreviewInstallHooks` in the project root
+- Run `:CodePreviewInstallClaudeCodeHooks` in the project root
 - Verify `.claude/settings.local.json` contains the hook entries
 - Ensure `jq` is in PATH
 - Restart Claude Code CLI
@@ -342,7 +351,12 @@ vim.api.nvim_create_autocmd({ "FocusGained", "BufEnter", "CursorHold" }, {
 - Restart OpenCode
 
 **Diff doesn't close after rejecting**
-- Press `<leader>dq` or run `:ClaudePreviewCloseDiff` — the post hook only fires on accept
+- Press `<leader>dq` or run `:CodePreviewCloseDiff` — the post hook only fires on accept
+
+**Migrating from older versions**
+- Update `require("claude-preview")` to `require("code-preview")` in your Neovim config
+- Re-run `:CodePreviewInstallClaudeCodeHooks` to update hook paths
+- The old `:ClaudePreview*` commands still work but show deprecation warnings
 
 ---
 

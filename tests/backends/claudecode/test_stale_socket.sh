@@ -131,8 +131,9 @@ EOF
   # project-specific nvim instance.
   assert_eq "0" "$exit_code" "hook must exit 0 without a guaranteed project nvim match" || return 1
 
-  # The proposed temp file must exist: headless nvim computed the edit.
-  local proposed="$hook_tmpdir/claude-diff-proposed"
+  # The proposed temp file must exist (PID-suffixed): headless nvim computed the edit.
+  local proposed
+  proposed="$(ls -1t "$hook_tmpdir"/claude-diff-proposed-* 2>/dev/null | head -1)"
   assert_file_exists "$proposed" "proposed file should be computed even without a project-specific nvim match" || return 1
   rm -rf "$hook_tmpdir"
 }

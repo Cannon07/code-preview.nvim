@@ -145,7 +145,6 @@ require("code-preview").setup({
   diff = {
     layout   = "tab",    -- "tab" (new tab) | "vsplit" (current tab) | "inline" (GitHub-style)
     labels   = { current = "CURRENT", proposed = "PROPOSED" },
-    auto_close = true,   -- close diff after accept
     equalize   = true,   -- 50/50 split widths (tab/vsplit only)
     full_file  = true,   -- show full file, not just diff hunks (tab/vsplit only)
     visible_only = false, -- skip diffs for files not open in any Neovim buffer

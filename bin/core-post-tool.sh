@@ -33,22 +33,14 @@ fi
 FILE_PATH="$(echo "$INPUT" | jq -r '.tool_input.file_path // empty' 2>/dev/null || true)"
 FILE_PATH_ESC="$(escape_lua "${FILE_PATH:-}")"
 
-# Only clean up if a diff for THIS file is actually open.
-# OpenCode fires all before-hooks before any after-hooks, so the open diff
-# may belong to a different file — closing it would kill the wrong preview.
-DIFF_OPEN=$(nvim --server "$NVIM_SOCKET" --remote-expr "luaeval(\"require('code-preview.diff').is_open('${FILE_PATH_ESC}')\")" 2>/dev/null || echo "false")
-
-if [[ "$DIFF_OPEN" == "true" ]]; then
-  nvim_send "require('code-preview.changes').clear_all()" || true
-  nvim_send "require('code-preview.diff').close_diff()" || true
-  if [[ -n "$FILE_PATH" ]]; then
-    nvim_send "vim.defer_fn(function() pcall(function() require('code-preview.neo_tree').refresh() end) vim.defer_fn(function() pcall(function() require('code-preview.neo_tree').reveal('$FILE_PATH_ESC') end) end, 200) end, 200)" || true
-  else
-    nvim_send "vim.defer_fn(function() pcall(function() require('code-preview.neo_tree').refresh() end) end, 200)" || true
-  fi
+# Tell Lua to handle this file's close — tolerates out-of-order post-hooks
+# (OpenCode may fire them in a different order than pre-hooks).
+if [[ -n "$FILE_PATH" ]]; then
+  nvim_send "require('code-preview.diff').close_for_file('$FILE_PATH_ESC')" || true
+  # neo_tree.refresh() is handled inside close_for_file() via vim.schedule()
 fi
 
-# Clean up temp files
-rm -f "${TMPDIR:-/tmp}/claude-diff-original" "${TMPDIR:-/tmp}/claude-diff-proposed"
+# Clean up temp files (both legacy shared paths and per-PID paths)
+rm -f "${TMPDIR:-/tmp}"/claude-diff-original* "${TMPDIR:-/tmp}"/claude-diff-proposed*
 
 exit 0

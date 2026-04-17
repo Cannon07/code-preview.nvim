@@ -7,7 +7,6 @@ local default_config = {
   diff = {
     layout = "tab",        -- "tab", "vsplit", or "inline"
     labels = { current = "CURRENT", proposed = "PROPOSED" },
-    auto_close = true,
     equalize = true,
     full_file = true,
     visible_only = false,  -- only show diffs for files open in a visible nvim window

@@ -26,8 +26,8 @@ if replace_all then
   local result = {}
   local search_start = 1
   if old_string == "" then
-    -- Nothing to replace; write content unchanged
-    result = { content }
+    -- Empty old_string: prepend new_string (handles "insert into empty file")
+    result = { new_string, content }
   else
     while true do
       local s, e = string.find(content, old_string, search_start, true)
@@ -43,7 +43,10 @@ if replace_all then
   content = table.concat(result)
 else
   -- Replace first occurrence only
-  if old_string ~= "" then
+  if old_string == "" then
+    -- Empty old_string: prepend new_string (handles "insert into empty file")
+    content = new_string .. content
+  else
     local s, e = string.find(content, old_string, 1, true)
     if s then
       content = content:sub(1, s - 1) .. new_string .. content:sub(e + 1)

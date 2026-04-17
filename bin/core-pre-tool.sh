@@ -32,8 +32,12 @@ if [[ -z "${NVIM_SOCKET:-}" ]]; then
 fi
 
 TMPDIR="${TMPDIR:-/tmp}"
-ORIG_FILE="$TMPDIR/claude-diff-original"
-PROP_FILE="$TMPDIR/claude-diff-proposed"
+# Use unique temp files per hook invocation so rapid-fire pre-hooks
+# (OpenCode fires all before-hooks before any after-hooks) don't clobber
+# each other's diff content.
+HOOK_ID="$$"
+ORIG_FILE="$TMPDIR/claude-diff-original-$HOOK_ID"
+PROP_FILE="$TMPDIR/claude-diff-proposed-$HOOK_ID"
 
 # --- Compute original and proposed file content ---
 
@@ -50,7 +54,7 @@ case "$TOOL_NAME" in
       > "$ORIG_FILE"
     fi
 
-    NVIM_LISTEN_ADDRESS= nvim --headless -l "$SCRIPT_DIR/apply-edit.lua" "$FILE_PATH" "$OLD_STRING" "$NEW_STRING" "$REPLACE_ALL" "$PROP_FILE"
+    NVIM_LISTEN_ADDRESS= nvim --headless -l "$SCRIPT_DIR/apply-edit.lua" "$FILE_PATH" "$OLD_STRING" "$NEW_STRING" "$REPLACE_ALL" "$PROP_FILE" || true
     ;;
 
   Write)
@@ -152,12 +156,10 @@ if [[ "$HAS_NVIM" == "true" ]]; then
   DISPLAY_ESC="$(escape_lua "$DISPLAY_NAME")"
   FILE_PATH_ESC="$(escape_lua "$FILE_PATH")"
 
-  # Query config + file visibility from nvim in a single RPC call
+  # Query config + file visibility from nvim in a single RPC call.
+  # Neo-tree indicator/reveal is now driven from lua/code-preview/diff.lua
+  # (inside show_diff), so we only need visibility + permission fields here.
   HOOK_CTX=$(nvim --server "$NVIM_SOCKET" --remote-expr "luaeval(\"require('code-preview').hook_context('${FILE_PATH_ESC}')\")" 2>/dev/null || echo '{}')
-  # Use explicit conditional: jq's `//` operator treats boolean false like null,
-  # which would silently convert `reveal = false` into `true`.
-  NEO_TREE_REVEAL=$(echo "$HOOK_CTX" | jq -r 'if .neo_tree_reveal == false then "false" else "true" end')
-  NEO_TREE_REVEAL_ROOT=$(echo "$HOOK_CTX" | jq -r '.reveal_root // "cwd"')
   VISIBLE_ONLY=$(echo "$HOOK_CTX" | jq -r '.visible_only // false')
   FILE_VISIBLE=$(echo "$HOOK_CTX" | jq -r '.file_visible // false')
   DEFER_PERMISSIONS=$(echo "$HOOK_CTX" | jq -r 'if .defer_claude_permissions == true then "true" else "false" end')
@@ -169,51 +171,7 @@ if [[ "$HAS_NVIM" == "true" ]]; then
     SHOULD_SHOW="0"
   fi
 
-  # Determine change status for neo-tree indicator
-  if [[ -f "$FILE_PATH" ]]; then
-    CHANGE_STATUS="modified"
-  else
-    CHANGE_STATUS="created"
-  fi
-
   if [[ "$SHOULD_SHOW" == "1" ]]; then
-    nvim_send "require('code-preview.changes').set('$FILE_PATH_ESC', '$CHANGE_STATUS')" || true
-
-    # Neo-tree integration (gated by config)
-    if [[ "$NEO_TREE_REVEAL" == "true" ]]; then
-      # Resolve the directory neo-tree should root from
-      REVEAL_DIR=""
-      if [[ "$NEO_TREE_REVEAL_ROOT" == "git" ]]; then
-        REVEAL_DIR=$(git -C "$(dirname "$FILE_PATH")" rev-parse --show-toplevel 2>/dev/null || echo "")
-        REVEAL_DIR="${REVEAL_DIR:-$(dirname "$FILE_PATH")}"
-      fi
-
-      # Resolve reveal target. For modified files the path exists; for created
-      # files the path (and possibly its parents) don't exist yet, so walk up to
-      # the nearest existing directory and reveal a sibling file inside it to
-      # force neo-tree to expand the path before virtual nodes are injected.
-      if [[ "$CHANGE_STATUS" == "modified" ]]; then
-        REVEAL_TARGET="$FILE_PATH"
-      else
-        REVEAL_PARENT="$(dirname "$FILE_PATH")"
-        while [[ ! -d "$REVEAL_PARENT" && "$REVEAL_PARENT" != "/" ]]; do
-          REVEAL_PARENT="$(dirname "$REVEAL_PARENT")"
-        done
-        REVEAL_TARGET="$(find "$REVEAL_PARENT" -maxdepth 1 -type f 2>/dev/null | head -1)"
-        REVEAL_TARGET="${REVEAL_TARGET:-$REVEAL_PARENT}"
-      fi
-      REVEAL_TARGET_ESC="$(escape_lua "$REVEAL_TARGET")"
-
-      nvim_send "pcall(function() require('code-preview.neo_tree').refresh() end)" || true
-
-      if [[ -n "$REVEAL_DIR" ]]; then
-        REVEAL_DIR_ESC="$(escape_lua "$REVEAL_DIR")"
-        nvim_send "vim.defer_fn(function() pcall(function() require('code-preview.neo_tree').reveal('$REVEAL_TARGET_ESC', '$REVEAL_DIR_ESC') end) end, 300)" || true
-      else
-        nvim_send "vim.defer_fn(function() pcall(function() require('code-preview.neo_tree').reveal('$REVEAL_TARGET_ESC') end) end, 300)" || true
-      fi
-    fi
-
     nvim_send "require('code-preview.diff').show_diff('$ORIG_ESC', '$PROP_ESC', '$DISPLAY_ESC', '$FILE_PATH_ESC')" || true
   fi
 fi

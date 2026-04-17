@@ -52,8 +52,9 @@ EOF
   change_status="$(nvim_eval "require('code-preview.changes').get('$test_file')")"
   assert_eq "modified" "$change_status" "file should be marked as modified" || return 1
 
-  # Proposed temp file should contain the edit result
-  local proposed="${TMPDIR:-/tmp}/claude-diff-proposed"
+  # Proposed temp file should contain the edit result (PID-suffixed)
+  local proposed
+  proposed="$(ls -1t "${TMPDIR:-/tmp}"/claude-diff-proposed-* 2>/dev/null | head -1)"
   assert_file_exists "$proposed" "proposed temp file should exist" || return 1
   local proposed_content
   proposed_content="$(cat "$proposed")"
@@ -261,7 +262,9 @@ EOF
   run_pretool_hook "$payload" >/dev/null
   sleep 0.5
 
-  local proposed="${TMPDIR:-/tmp}/claude-diff-proposed"
+  local proposed
+  proposed="$(ls -1t "${TMPDIR:-/tmp}"/claude-diff-proposed-* 2>/dev/null | head -1)"
+  assert_file_exists "$proposed" "proposed temp file should exist" || return 1
   local proposed_content
   proposed_content="$(cat "$proposed")"
   assert_not_contains "$proposed_content" "foo" "all occurrences of 'foo' should be replaced" || return 1

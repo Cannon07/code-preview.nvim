@@ -62,7 +62,7 @@ reset_test_state() {
   nvim_exec "require('code-preview.diff').close_diff_and_clear()" 2>/dev/null || true
   # Remove temp files that persist across runs (shared by both backends)
   local _tmpdir="${TMPDIR:-/tmp}"
-  rm -f "$_tmpdir/claude-diff-original" "$_tmpdir/claude-diff-proposed"
+  rm -f "$_tmpdir"/claude-diff-original* "$_tmpdir"/claude-diff-proposed*
   sleep 0.3
 }
 

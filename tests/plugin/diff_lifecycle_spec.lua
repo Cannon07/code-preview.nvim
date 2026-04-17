@@ -100,7 +100,7 @@ describe("diff lifecycle", function()
     os.remove(prop)
   end)
 
-  it("show_diff queues when a diff for a different file is already open", function()
+  it("show_diff opens multiple tabs for different files simultaneously", function()
     local orig1 = tmp_file("q_orig1.txt", "file1 original")
     local prop1 = tmp_file("q_prop1.txt", "file1 proposed")
     local orig2 = tmp_file("q_orig2.txt", "file2 original")
@@ -110,16 +110,18 @@ describe("diff lifecycle", function()
     diff.show_diff(orig1, prop1, "file1.txt", "/abs/file1.txt")
     assert.is_true(diff.is_open("/abs/file1.txt"))
 
-    -- Show diff for file2 while file1 is open — should queue, not replace
+    -- Show diff for file2 while file1 is open — both should be active
     diff.show_diff(orig2, prop2, "file2.txt", "/abs/file2.txt")
-    assert.is_true(diff.is_open("/abs/file1.txt"))  -- file1 still showing
+    assert.is_true(diff.is_open("/abs/file1.txt"))  -- file1 still open
+    assert.is_true(diff.is_open("/abs/file2.txt"))  -- file2 also open
 
-    -- Close file1's diff — file2 should auto-show from queue
-    diff.close_diff()
+    -- Close file1's diff — file2 should remain
+    diff.close_for_file("/abs/file1.txt")
+    assert.is_false(diff.is_open("/abs/file1.txt"))
     assert.is_true(diff.is_open("/abs/file2.txt"))
 
     -- Close file2
-    diff.close_diff()
+    diff.close_for_file("/abs/file2.txt")
     assert.is_false(diff.is_open())
 
     os.remove(orig1)
@@ -128,18 +130,45 @@ describe("diff lifecycle", function()
     os.remove(prop2)
   end)
 
-  it("close_diff_and_clear discards the queue", function()
+  it("close_for_file leaves no stale tabpage references", function()
+    local orig = tmp_file("stale_orig.txt", "before")
+    local prop = tmp_file("stale_prop.txt", "after")
+
+    diff.show_diff(orig, prop, "stale.txt", "/abs/stale.txt")
+    assert.is_true(diff.is_open("/abs/stale.txt"))
+
+    -- Record the tab handle before closing
+    local tab_before = nil
+    for _, entry in pairs(diff._active_diffs()) do
+      tab_before = entry.tab
+    end
+    assert.is_not_nil(tab_before)
+
+    diff.close_for_file("/abs/stale.txt")
+
+    -- The diff must be gone from the active set
+    assert.is_false(diff.is_open("/abs/stale.txt"))
+
+    -- The tab must no longer be valid (no stale tabpage reference)
+    assert.is_false(vim.api.nvim_tabpage_is_valid(tab_before))
+
+    os.remove(orig)
+    os.remove(prop)
+  end)
+
+  it("close_diff_and_clear closes all active diffs", function()
     local orig1 = tmp_file("drain_orig1.txt", "aaa")
     local prop1 = tmp_file("drain_prop1.txt", "bbb")
     local orig2 = tmp_file("drain_orig2.txt", "ccc")
     local prop2 = tmp_file("drain_prop2.txt", "ddd")
 
     diff.show_diff(orig1, prop1, "drain1.txt", "/abs/drain1.txt")
-    diff.show_diff(orig2, prop2, "drain2.txt", "/abs/drain2.txt") -- queued
+    diff.show_diff(orig2, prop2, "drain2.txt", "/abs/drain2.txt")
 
     assert.is_true(diff.is_open("/abs/drain1.txt"))
+    assert.is_true(diff.is_open("/abs/drain2.txt"))
 
-    -- Manual close should discard the queue — file2 should NOT auto-show
+    -- close_diff_and_clear should close both diffs
     diff.close_diff_and_clear()
     assert.is_false(diff.is_open())
 

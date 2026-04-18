@@ -185,19 +185,6 @@ function M.status()
     table.insert(lines, "Neovim socket : not found")
   end
 
-  -- Hooks installed?
-  local settings_path = vim.fn.getcwd() .. "/.claude/settings.local.json"
-  local hooks_ok = false
-  local f = io.open(settings_path, "r")
-  if f then
-    local content = f:read("*a")
-    f:close()
-    -- Detect both new and legacy hook markers
-    hooks_ok = content:find("code-preview", 1, true) ~= nil
-               or content:find("claude-preview", 1, true) ~= nil
-  end
-  table.insert(lines, "Hooks         : " .. (hooks_ok and "installed" or "not installed"))
-
   -- jq dependency
   local jq_ok = vim.fn.executable("jq") == 1
   table.insert(lines, "jq            : " .. (jq_ok and "found" or "MISSING"))
@@ -205,6 +192,34 @@ function M.status()
   -- Diff tab open?
   local diff = require("code-preview.diff")
   table.insert(lines, "Diff tab      : " .. (diff.is_open() and "open" or "closed"))
+
+  -- Backends
+  table.insert(lines, "")
+  table.insert(lines, "Backends:")
+
+  -- Claude Code
+  local claude_ok = false
+  local settings_path = vim.fn.getcwd() .. "/.claude/settings.local.json"
+  local f = io.open(settings_path, "r")
+  if f then
+    local content = f:read("*a")
+    f:close()
+    claude_ok = content:find("code-preview", 1, true) ~= nil
+                or content:find("claude-preview", 1, true) ~= nil
+  end
+  if claude_ok then
+    table.insert(lines, "  Claude Code : installed")
+  else
+    table.insert(lines, "  Claude Code : not installed  ->  :CodePreviewInstallClaudeCodeHooks")
+  end
+
+  -- OpenCode
+  local opencode_ok = vim.fn.filereadable(vim.fn.getcwd() .. "/.opencode/plugins/index.ts") == 1
+  if opencode_ok then
+    table.insert(lines, "  OpenCode    : installed")
+  else
+    table.insert(lines, "  OpenCode    : not installed  ->  :CodePreviewInstallOpenCodeHooks")
+  end
 
   vim.notify(table.concat(lines, "\n"), vim.log.levels.INFO, { title = "code-preview" })
 end

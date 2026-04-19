@@ -142,6 +142,7 @@ All options with defaults:
 
 ```lua
 require("code-preview").setup({
+  debug = false,         -- enable debug logging to stdpath("log")/code-preview.log
   diff = {
     layout   = "tab",    -- "tab" (new tab) | "vsplit" (current tab) | "inline" (GitHub-style)
     labels   = { current = "CURRENT", proposed = "PROPOSED" },
@@ -281,6 +282,7 @@ code-preview.nvim/
 ├── lua/code-preview/
 │   ├── init.lua                     setup(), config, commands
 │   ├── diff.lua                     show_diff(), close_diff()
+│   ├── log.lua                      opt-in debug logging
 │   ├── changes.lua                  change status registry (modified/created/deleted)
 │   ├── neo_tree.lua                 neo-tree integration (icons, virtual nodes, reveal)
 │   ├── health.lua                   :checkhealth (both backends)
@@ -293,7 +295,8 @@ code-preview.nvim/
 │   ├── nvim-socket.sh               Neovim socket discovery
 │   ├── nvim-send.sh                 RPC send helper
 │   ├── apply-edit.lua               Single Edit transformer
-│   └── apply-multi-edit.lua         MultiEdit transformer
+│   ├── apply-multi-edit.lua         MultiEdit transformer
+│   └── apply-patch.lua              ApplyPatch transformer (custom patch format)
 ├── backends/
 │   ├── claudecode/                  Claude Code adapter
 │   │   ├── code-preview-diff.sh     PreToolUse hook entry point
@@ -339,6 +342,7 @@ vim.api.nvim_create_autocmd({ "FocusGained", "BufEnter", "CursorHold" }, {
 **Diff doesn't open**
 - Run `:CodePreviewStatus` — check that `Neovim socket` is found
 - Run `:checkhealth code-preview` — check for missing dependencies
+- Enable debug logging (`debug = true` in setup) and check `~/.local/state/nvim/code-preview.log`
 - Restart the CLI agent after installing hooks (hooks are read at startup)
 
 **Claude Code hooks not firing**

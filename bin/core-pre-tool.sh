@@ -150,7 +150,71 @@ case "$TOOL_NAME" in
     ;;
 
   ApplyPatch)
-    # Stub for V1 — skip diff preview (matches current OpenCode behavior)
+    PATCH_TEXT="$(echo "$INPUT" | jq -r '.tool_input.patch_text // empty')"
+    if [[ -z "$PATCH_TEXT" ]]; then
+      log_pre "ApplyPatch: empty patch_text, exiting"
+      exit 0
+    fi
+    log_pre "ApplyPatch: received patch (${#PATCH_TEXT} chars)"
+
+    # Write patch JSON to a temp file for the Lua parser
+    PATCH_JSON="$TMPDIR/claude-patch-input-$HOOK_ID.json"
+    echo "$INPUT" | jq '{patch_text: .tool_input.patch_text}' > "$PATCH_JSON"
+
+    PATCH_OUTDIR="$TMPDIR/claude-patch-out-$HOOK_ID"
+    mkdir -p "$PATCH_OUTDIR"
+
+    # Parse the custom patch format and compute per-file original/proposed
+    log_pre "ApplyPatch: running apply-patch.lua"
+    NVIM_LISTEN_ADDRESS= nvim --headless -l "$SCRIPT_DIR/apply-patch.lua" "$PATCH_JSON" "$CWD" "$PATCH_OUTDIR" 2>/dev/null || true
+
+    RESULTS_FILE="$PATCH_OUTDIR/files.json"
+    if [[ ! -f "$RESULTS_FILE" ]]; then
+      log_pre "ApplyPatch: apply-patch.lua produced no results"
+      rm -f "$PATCH_JSON"
+      rm -rf "$PATCH_OUTDIR"
+      exit 0
+    fi
+
+    # Read results and send each file's diff to nvim
+    FILE_COUNT=$(jq 'length' "$RESULTS_FILE")
+    log_pre "ApplyPatch: parsed $FILE_COUNT file(s)"
+
+    for i in $(seq 0 $((FILE_COUNT - 1))); do
+      PATCH_FILE_PATH=$(jq -r ".[$i].path" "$RESULTS_FILE")
+      REL_PATH=$(jq -r ".[$i].rel_path" "$RESULTS_FILE")
+      ACTION=$(jq -r ".[$i].action" "$RESULTS_FILE")
+      PATCH_ORIG=$(jq -r ".[$i].orig" "$RESULTS_FILE")
+      PATCH_PROP=$(jq -r ".[$i].prop" "$RESULTS_FILE")
+
+      log_pre "ApplyPatch: file=$REL_PATH action=$ACTION"
+
+      if [[ "$HAS_NVIM" == "true" ]]; then
+        display_esc="$(escape_lua "$REL_PATH")"
+        orig_esc="$(escape_lua "$PATCH_ORIG")"
+        prop_esc="$(escape_lua "$PATCH_PROP")"
+        fpath_esc="$(escape_lua "$PATCH_FILE_PATH")"
+
+        HOOK_CTX=$(nvim --server "$NVIM_SOCKET" --remote-expr "luaeval(\"require('code-preview').hook_context('${fpath_esc}')\")" 2>/dev/null || echo '{}')
+        VISIBLE_ONLY=$(echo "$HOOK_CTX" | jq -r '.visible_only // false')
+        FILE_VISIBLE=$(echo "$HOOK_CTX" | jq -r '.file_visible // false')
+
+        SHOULD_SHOW="1"
+        if [[ "$VISIBLE_ONLY" == "true" && "$FILE_VISIBLE" != "true" ]]; then
+          SHOULD_SHOW="0"
+          log_pre "ApplyPatch: skipping diff for $REL_PATH (visible_only)"
+        fi
+
+        if [[ "$SHOULD_SHOW" == "1" ]]; then
+          log_pre "ApplyPatch: sending diff for $REL_PATH to nvim"
+          nvim_send "require('code-preview.diff').show_diff('$orig_esc', '$prop_esc', '$display_esc', '$fpath_esc')" || true
+        fi
+      else
+        log_pre "ApplyPatch: no nvim connection, skipping diff for $REL_PATH"
+      fi
+    done
+
+    rm -f "$PATCH_JSON"
     exit 0
     ;;
 

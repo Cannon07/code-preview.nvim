@@ -72,8 +72,9 @@ function toNormalizedJson(
   // Bash fields
   if (args.command !== undefined) toolInput.command = args.command
 
-  // ApplyPatch fields
+  // ApplyPatch fields — handle both possible field names from different models
   if (args.patchText !== undefined) toolInput.patch_text = args.patchText
+  if (args.patch !== undefined) toolInput.patch_text = args.patch
 
   return JSON.stringify({ tool_name: toolName, cwd, tool_input: toolInput })
 }

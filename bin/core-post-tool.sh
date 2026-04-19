@@ -42,6 +42,39 @@ if [[ "$TOOL_NAME" == "Bash" ]]; then
   exit 0
 fi
 
+# ApplyPatch: extract file paths from patch_text and close each diff
+if [[ "$TOOL_NAME" == "ApplyPatch" ]]; then
+  PATCH_TEXT="$(echo "$INPUT" | jq -r '.tool_input.patch_text // empty' 2>/dev/null || true)"
+  CWD_POST="$(echo "$INPUT" | jq -r '.cwd // empty' 2>/dev/null || true)"
+  if [[ -n "$PATCH_TEXT" ]]; then
+    # Extract paths from both standard unified diff (+++ lines) and
+    # custom patch format (*** Update File: / *** Add File: lines)
+    extract_patch_paths() {
+      echo "$1" | grep -E '^\+\+\+ ' | while IFS= read -r line; do
+        fpath="${line#+++ }"
+        fpath="${fpath#b/}"
+        [[ "$fpath" == "/dev/null" ]] && continue
+        echo "$fpath"
+      done
+      echo "$1" | grep -E '^\*\*\* (Update|Add) File:' | while IFS= read -r line; do
+        echo "$line" | sed -E 's/^\*\*\* (Update|Add) File:[[:space:]]*//' | sed 's/[[:space:]]*$//'
+      done
+    }
+
+    while IFS= read -r fpath; do
+      [[ -z "$fpath" ]] && continue
+      if [[ "$fpath" != /* && -n "$CWD_POST" ]]; then
+        fpath="$CWD_POST/$fpath"
+      fi
+      fpath_esc="$(escape_lua "$fpath")"
+      log_post "closing diff for patch file=$fpath"
+      nvim_send "require('code-preview.diff').close_for_file('$fpath_esc')" || true
+    done < <(extract_patch_paths "$PATCH_TEXT")
+  fi
+  rm -f "${TMPDIR:-/tmp}"/claude-diff-original* "${TMPDIR:-/tmp}"/claude-diff-proposed* "${TMPDIR:-/tmp}"/claude-patch-*
+  exit 0
+fi
+
 # Extract file path early — needed for tagged is_open() check
 FILE_PATH="$(echo "$INPUT" | jq -r '.tool_input.file_path // empty' 2>/dev/null || true)"
 FILE_PATH_ESC="$(escape_lua "${FILE_PATH:-}")"

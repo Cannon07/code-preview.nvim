@@ -4,6 +4,7 @@ local M = {}
 M.config = {}
 
 local default_config = {
+  debug = false,  -- enable debug logging to stdpath("log")/code-preview.log
   diff = {
     layout = "tab",        -- "tab", "vsplit", or "inline"
     labels = { current = "CURRENT", proposed = "PROPOSED" },
@@ -79,6 +80,9 @@ end
 
 function M.setup(user_config)
   M.config = deep_merge(default_config, user_config or {})
+
+  -- Initialise logging
+  require("code-preview.log").init({ debug = M.config.debug })
 
   -- ── New commands ──────────────────────────────────────────────
 
@@ -162,12 +166,16 @@ function M.hook_context(file_path)
     end
   end
 
+  local log = require("code-preview.log")
+
   return vim.json.encode({
     neo_tree_reveal = neo_tree_reveal,
     reveal_root = reveal_root,
     visible_only = visible_only,
     file_visible = file_visible,
     defer_claude_permissions = defer_claude_permissions,
+    debug = log.is_enabled(),
+    log_file = log.get_log_path() or "",
   })
 end
 

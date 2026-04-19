@@ -1,6 +1,7 @@
 local M = {}
 
 local changes = require("code-preview.changes")
+local log = require("code-preview.log")
 
 -- Guard: all neo-tree interaction goes through pcall
 local has_neo_tree = false
@@ -260,6 +261,7 @@ local function inject_virtual_nodes(state, pending)
     pcall(function()
       state.tree:add_node(file_node, parent_path)
       virtual_nodes[filepath] = true
+      log.debug(log.fmt("neo_tree: injected virtual node for %s", filepath))
     end)
     changed = true
 
@@ -276,10 +278,12 @@ function M.setup(cfg)
 
   local ok, neo_tree_events = pcall(require, "neo-tree.events")
   if not ok then
+    log.debug("neo_tree.setup: neo-tree not found, skipping integration")
     return
   end
   has_neo_tree = true
   setup_done = true
+  log.info("neo_tree.setup: neo-tree integration enabled")
 
   local symbols = cfg.neo_tree.symbols
   local highlights = cfg.neo_tree.highlights
@@ -340,6 +344,7 @@ function M.refresh()
   if not has_neo_tree then
     return
   end
+  log.debug("neo_tree.refresh: triggering filesystem refresh")
   pcall(function()
     require("neo-tree.sources.manager").refresh("filesystem")
   end)
@@ -349,6 +354,7 @@ function M.reveal(filepath, dir)
   if not has_neo_tree then
     return
   end
+  log.debug(log.fmt("neo_tree.reveal: %s (dir=%s)", filepath, dir or "nil"))
   pcall(function()
     local cfg = require("code-preview").config
     local position = cfg.neo_tree.position or "right"

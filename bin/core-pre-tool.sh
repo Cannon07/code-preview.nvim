@@ -31,6 +31,19 @@ if [[ -z "${NVIM_SOCKET:-}" ]]; then
   HAS_NVIM=false
 fi
 
+# Set up logging early so all code paths can use it
+log_pre() { :; }
+if [[ "$HAS_NVIM" == "true" ]]; then
+  _PRE_CTX=$(nvim --server "$NVIM_SOCKET" --remote-expr "luaeval(\"vim.json.encode({debug=require('code-preview.log').is_enabled(),log_file=require('code-preview.log').get_log_path() or ''})\")" 2>/dev/null || echo '{}')
+  _PRE_DEBUG=$(echo "$_PRE_CTX" | jq -r '.debug // false')
+  _PRE_LOG_FILE=$(echo "$_PRE_CTX" | jq -r '.log_file // ""')
+  if [[ "$_PRE_DEBUG" == "true" && -n "$_PRE_LOG_FILE" ]]; then
+    log_pre() { printf '[%s] [INFO] core-pre-tool.sh: %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*" >> "$_PRE_LOG_FILE"; }
+  fi
+fi
+
+log_pre "tool=$TOOL_NAME has_nvim=$HAS_NVIM"
+
 TMPDIR="${TMPDIR:-/tmp}"
 # Use unique temp files per hook invocation so rapid-fire pre-hooks
 # (OpenCode fires all before-hooks before any after-hooks) don't clobber
@@ -164,14 +177,18 @@ if [[ "$HAS_NVIM" == "true" ]]; then
   FILE_VISIBLE=$(echo "$HOOK_CTX" | jq -r '.file_visible // false')
   DEFER_PERMISSIONS=$(echo "$HOOK_CTX" | jq -r 'if .defer_claude_permissions == true then "true" else "false" end')
 
+  log_pre "file=$FILE_PATH visible_only=$VISIBLE_ONLY file_visible=$FILE_VISIBLE"
+
   # Decide whether to show the diff — skip nvim UI entirely when visible_only
   # is on and the file isn't in any visible window.
   SHOULD_SHOW="1"
   if [[ "$VISIBLE_ONLY" == "true" && "$FILE_VISIBLE" != "true" ]]; then
     SHOULD_SHOW="0"
+    log_pre "skipping diff: visible_only=true, file not visible"
   fi
 
   if [[ "$SHOULD_SHOW" == "1" ]]; then
+    log_pre "sending diff to nvim (layout via config)"
     nvim_send "require('code-preview.diff').show_diff('$ORIG_ESC', '$PROP_ESC', '$DISPLAY_ESC', '$FILE_PATH_ESC')" || true
   fi
 fi

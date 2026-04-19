@@ -22,6 +22,19 @@ TOOL_NAME="$(echo "$INPUT" | jq -r '.tool_name // empty' 2>/dev/null || true)"
 source "$SCRIPT_DIR/nvim-socket.sh" "$CWD" 2>/dev/null
 source "$SCRIPT_DIR/nvim-send.sh"
 
+# Set up logging — query debug config from nvim
+log_post() { :; }
+if [[ -n "${NVIM_SOCKET:-}" ]]; then
+  _POST_CTX=$(nvim --server "$NVIM_SOCKET" --remote-expr "luaeval(\"vim.json.encode({debug=require('code-preview.log').is_enabled(),log_file=require('code-preview.log').get_log_path() or ''})\")" 2>/dev/null || echo '{}')
+  _POST_DEBUG=$(echo "$_POST_CTX" | jq -r '.debug // false')
+  _POST_LOG_FILE=$(echo "$_POST_CTX" | jq -r '.log_file // ""')
+  if [[ "$_POST_DEBUG" == "true" && -n "$_POST_LOG_FILE" ]]; then
+    log_post() { printf '[%s] [INFO] core-post-tool.sh: %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*" >> "$_POST_LOG_FILE"; }
+  fi
+fi
+
+log_post "tool=$TOOL_NAME"
+
 # For Bash tool (rm detection), only clear deletion markers — don't touch edit markers or diff tab
 if [[ "$TOOL_NAME" == "Bash" ]]; then
   nvim_send "require('code-preview.changes').clear_by_status('deleted')" || true
@@ -36,6 +49,7 @@ FILE_PATH_ESC="$(escape_lua "${FILE_PATH:-}")"
 # Tell Lua to handle this file's close — tolerates out-of-order post-hooks
 # (OpenCode may fire them in a different order than pre-hooks).
 if [[ -n "$FILE_PATH" ]]; then
+  log_post "closing diff for file=$FILE_PATH"
   nvim_send "require('code-preview.diff').close_for_file('$FILE_PATH_ESC')" || true
   # neo_tree.refresh() is handled inside close_for_file() via vim.schedule()
 fi

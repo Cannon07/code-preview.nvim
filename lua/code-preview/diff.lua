@@ -1,5 +1,7 @@
 local M = {}
 
+local log = require("code-preview.log")
+
 -- Active diffs keyed by absolute file path.
 -- Each entry: { tab, bufs, augroup, inline_win }
 local active_diffs = {}
@@ -32,6 +34,7 @@ local function mark_change_and_reveal(abs_file_path)
   end
 
   local status = vim.loop.fs_stat(abs_file_path) and "modified" or "created"
+  log.debug(log.fmt("mark_change_and_reveal: %s → %s", abs_file_path, status))
   pcall(function() require("code-preview.changes").set(abs_file_path, status) end)
   pcall(function() require("code-preview.neo_tree").refresh() end)
 
@@ -371,15 +374,20 @@ end
 
 function M.show_diff(original_path, proposed_path, real_file_path, abs_file_path)
   local file_key = abs_file_path or real_file_path
+  local cfg = require("code-preview").config
+  log.info(log.fmt("show_diff: file=%s layout=%s active=%d",
+    file_key or "nil",
+    (cfg.diff and cfg.diff.layout) or "tab",
+    active_count()))
+
   -- If a diff for this SAME file is already open, close it first (re-edit)
   if file_key and active_diffs[file_key] then
+    log.debug(log.fmt("show_diff: re-edit detected, closing existing diff for %s", file_key))
     M.close_for_file(file_key)
   end
 
   -- Set the neo-tree indicator + reveal
   mark_change_and_reveal(abs_file_path)
-
-  local cfg = require("code-preview").config
 
   -- Inline layout
   if cfg.diff.layout == "inline" then
@@ -478,8 +486,11 @@ end
 function M.close_for_file(file_path)
   local entry = active_diffs[file_path]
   if not entry then
+    log.debug(log.fmt("close_for_file: no active diff for %s, skipping", file_path))
     return
   end
+
+  log.info(log.fmt("close_for_file: closing diff for %s (remaining=%d)", file_path, active_count() - 1))
 
   -- Clear neo-tree indicator (refresh is deferred until after the tab is closed
   -- to avoid neo-tree walking a stale tabpage id)
@@ -545,6 +556,7 @@ end
 
 -- Close ALL diffs and clear neo-tree indicators (for manual close via <leader>dq)
 function M.close_diff_and_clear()
+  log.info(log.fmt("close_diff_and_clear: closing all diffs (count=%d)", active_count()))
   -- Collect keys first to avoid modifying table during iteration
   local files = {}
   for file_path, _ in pairs(active_diffs) do

@@ -9,10 +9,13 @@ Supports [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [OpenCod
 ## Demo
 
 ### Claude Code
-![Claude Code demo](docs/claude-preview-demo.gif)
+![Claude Code demo](docs/code-preview-claudecode.gif)
 
 ### OpenCode
-![OpenCode demo](docs/claude-preview-opencode.gif)
+![OpenCode demo](docs/code-preview-opencode.gif)
+
+### GitHub Copilot CLI
+![GitHub Copilot CLI demo](docs/code-preview-copilot.gif)
 
 ---
 
@@ -251,7 +254,7 @@ require("code-preview").setup({
 
 If you use [neo-tree.nvim](https://github.com/nvim-neo-tree/neo-tree.nvim), code-preview will automatically decorate your file tree with visual indicators when changes are proposed. No extra configuration is required — it works out of the box.
 
-![neo-tree integration demo](docs/claude-preview-neotree-integration.gif)
+![neo-tree integration demo](docs/code-preview-neotree-integration.gif)
 
 ### What you get
 

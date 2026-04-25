@@ -132,6 +132,38 @@ function M.check()
   else
     warn("OpenCode plugin not installed — run :CodePreviewInstallOpenCodeHooks")
   end
+
+  -- ── Copilot CLI backend ───────────────────────────────────────
+
+  start("GitHub Copilot CLI backend")
+
+  -- copilot binary
+  if vim.fn.executable("copilot") == 1 then
+    ok("copilot CLI is available in PATH")
+  else
+    warn("copilot not found in PATH (install from https://github.com/github/copilot-cli)")
+  end
+
+  -- Adapter scripts
+  local copilot_dir = plugin_root .. "/backends/copilot"
+  for _, script in ipairs({ "code-preview-diff.sh", "code-close-diff.sh" }) do
+    local path = copilot_dir .. "/" .. script
+    if vim.fn.filereadable(path) == 1 and vim.fn.executable(path) == 1 then
+      ok(script .. " is executable")
+    elseif vim.fn.filereadable(path) == 1 then
+      warn(script .. " exists but is not executable (run: chmod +x " .. path .. ")")
+    else
+      error(script .. " not found at " .. path)
+    end
+  end
+
+  -- hooks.json installed
+  local copilot_hooks = vim.fn.getcwd() .. "/.github/hooks/code-preview.json"
+  if vim.fn.filereadable(copilot_hooks) == 1 then
+    ok("Copilot CLI hooks are installed (.github/hooks/code-preview.json)")
+  else
+    warn("Copilot CLI hooks not installed — run :CodePreviewInstallCopilotCliHooks")
+  end
 end
 
 return M

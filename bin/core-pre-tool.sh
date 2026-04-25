@@ -10,7 +10,9 @@
 #     "tool_input": { "file_path": "...", ... } }
 #
 # Environment:
-#   CODE_PREVIEW_BACKEND  — "claudecode" or "opencode" (gates output format)
+#   CODE_PREVIEW_BACKEND  — "claudecode" | "opencode" | "copilot". Only
+#                           "claudecode" emits the permissionDecision JSON
+#                           on stdout; other values suppress it.
 
 set -euo pipefail
 

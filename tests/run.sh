@@ -7,6 +7,7 @@
 #   ./tests/run.sh backends             # run all backend tests
 #   ./tests/run.sh backends/claude      # run Claude Code backend tests only
 #   ./tests/run.sh backends/opencode    # run OpenCode backend tests only
+#   ./tests/run.sh core                 # run core shell tests (bin/ scripts)
 #   ./tests/run.sh edit                 # run any backend test file matching "edit"
 
 set -euo pipefail
@@ -51,6 +52,11 @@ discover_backend_tests() {
         done < <(find "$backend_dir" -name 'test_*.sh' -type f 2>/dev/null | sort)
       fi
       ;;
+    core)
+      while IFS= read -r f; do
+        test_files+=("$f")
+      done < <(find "$SCRIPT_DIR/core" -name 'test_*.sh' -type f 2>/dev/null | sort)
+      ;;
     *)
       # Fuzzy match: find any test file whose name contains the filter
       while IFS= read -r f; do
@@ -59,7 +65,7 @@ discover_backend_tests() {
         if [[ "$base" == *"$filter"* ]]; then
           test_files+=("$f")
         fi
-      done < <(find "$SCRIPT_DIR/backends" -name 'test_*.sh' -type f 2>/dev/null | sort)
+      done < <(find "$SCRIPT_DIR/backends" "$SCRIPT_DIR/core" -name 'test_*.sh' -type f 2>/dev/null | sort)
       ;;
   esac
 
@@ -126,12 +132,14 @@ main() {
     all)
       run_plugin_tests
       echo ""
+      run_backend_tests "core"
+      echo ""
       run_backend_tests "backends"
       ;;
     plugin)
       run_plugin_tests
       ;;
-    backends|backends/*)
+    backends|backends/*|core)
       run_backend_tests "$filter"
       ;;
     *)

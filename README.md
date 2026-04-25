@@ -2,17 +2,20 @@
 
 A Neovim plugin that shows a **diff preview before your AI coding agent applies any file change** — letting you review exactly what's changing before accepting.
 
-Supports [Claude Code](https://docs.anthropic.com/en/docs/claude-code) and [OpenCode](https://opencode.ai) as backends.
+Supports [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [OpenCode](https://opencode.ai), and [GitHub Copilot CLI](https://github.com/github/copilot-cli) as backends.
 
 ---
 
 ## Demo
 
 ### Claude Code
-![Claude Code demo](docs/claude-preview-demo.gif)
+![Claude Code demo](docs/code-preview-claudecode.gif)
 
 ### OpenCode
-![OpenCode demo](docs/claude-preview-opencode.gif)
+![OpenCode demo](docs/code-preview-opencode.gif)
+
+### GitHub Copilot CLI
+![GitHub Copilot CLI demo](docs/code-preview-copilot.gif)
 
 ---
 
@@ -24,6 +27,7 @@ Supports [Claude Code](https://docs.anthropic.com/en/docs/claude-code) and [Open
 - [Quick Start](#quick-start)
   - [Claude Code](#claude-code)
   - [OpenCode](#opencode)
+  - [GitHub Copilot CLI](#github-copilot-cli)
 - [How it works](#how-it-works)
 - [Configuration](#configuration)
 - [Commands](#commands)
@@ -54,6 +58,10 @@ Supports [Claude Code](https://docs.anthropic.com/en/docs/claude-code) and [Open
 
 **For OpenCode backend:**
 - [OpenCode](https://opencode.ai) >= 1.3.0
+
+**For GitHub Copilot CLI backend:**
+- [GitHub Copilot CLI](https://github.com/github/copilot-cli) (generally available since Feb 2026)
+- [jq](https://jqlang.github.io/jq/) — for hook payload translation
 
 ---
 
@@ -110,6 +118,18 @@ require("code-preview").setup()
 7. Accept/reject in OpenCode; the diff closes automatically on accept
 8. If rejected, press `<leader>dq` to close the diff manually
 
+### GitHub Copilot CLI
+
+1. Install the plugin and call `setup()`
+2. Open a project in Neovim
+3. Run `:CodePreviewInstallCopilotCliHooks` — writes `.github/hooks/code-preview.json`
+4. Start Copilot CLI in the project directory
+5. Ask Copilot to edit a file — a diff opens automatically in Neovim
+6. Accept/reject in the CLI; the diff closes automatically on accept
+7. If rejected, press `<leader>dq` to close the diff manually
+
+> **Note:** Copilot CLI does not fire post-tool hooks on rejection, so rejected diffs remain open until you dismiss them (same as Claude Code).
+
 ---
 
 ## How it works
@@ -132,7 +152,9 @@ AI Agent (terminal)                              Neovim
 
 **OpenCode** uses a TypeScript plugin (`tool.execute.before`/`tool.execute.after`) loaded from `.opencode/plugins/`.
 
-Both backends communicate with Neovim via RPC (`nvim --server <socket> --remote-send`).
+**GitHub Copilot CLI** uses shell-based hooks (`preToolUse`/`postToolUse`) configured in `.github/hooks/code-preview.json`. The adapter translates Copilot's tool vocabulary (`apply_patch`, `edit`, `create`, `bash`) into the same normalized format used by the other backends.
+
+All backends communicate with Neovim via RPC (`nvim --server <socket> --remote-send`).
 
 ---
 
@@ -184,6 +206,8 @@ require("code-preview").setup({
 | `:CodePreviewUninstallClaudeCodeHooks` | Remove Claude Code hooks (leaves other hooks intact) |
 | `:CodePreviewInstallOpenCodeHooks` | Install OpenCode plugin to `.opencode/plugins/` |
 | `:CodePreviewUninstallOpenCodeHooks` | Remove OpenCode plugin |
+| `:CodePreviewInstallCopilotCliHooks` | Install Copilot CLI hooks to `.github/hooks/code-preview.json` |
+| `:CodePreviewUninstallCopilotCliHooks` | Remove Copilot CLI hooks |
 | `:CodePreviewCloseDiff` | Manually close the diff (use after rejecting a change) |
 | `:CodePreviewStatus` | Show socket path, hook status, and dependency check |
 | `:CodePreviewToggleVisibleOnly` | Toggle visible_only — show diffs only for open buffers |
@@ -230,7 +254,7 @@ require("code-preview").setup({
 
 If you use [neo-tree.nvim](https://github.com/nvim-neo-tree/neo-tree.nvim), code-preview will automatically decorate your file tree with visual indicators when changes are proposed. No extra configuration is required — it works out of the box.
 
-![neo-tree integration demo](docs/claude-preview-neotree-integration.gif)
+![neo-tree integration demo](docs/code-preview-neotree-integration.gif)
 
 ### What you get
 
@@ -301,10 +325,13 @@ code-preview.nvim/
 │   ├── claudecode/                  Claude Code adapter
 │   │   ├── code-preview-diff.sh     PreToolUse hook entry point
 │   │   └── code-close-diff.sh       PostToolUse hook entry point
-│   └── opencode/                    OpenCode adapter
-│       ├── index.ts                 tool.execute.before/after hooks
-│       ├── package.json
-│       └── tsconfig.json
+│   ├── opencode/                    OpenCode adapter
+│   │   ├── index.ts                 tool.execute.before/after hooks
+│   │   ├── package.json
+│   │   └── tsconfig.json
+│   └── copilot/                     GitHub Copilot CLI adapter
+│       ├── code-preview-diff.sh     preToolUse hook — translates Copilot JSON → core
+│       └── code-close-diff.sh       postToolUse hook — same for close
 ```
 
 ---
@@ -356,6 +383,12 @@ vim.api.nvim_create_autocmd({ "FocusGained", "BufEnter", "CursorHold" }, {
 - Verify `.opencode/plugins/index.ts` exists
 - Ensure `"permission": { "edit": "ask" }` is set in `~/.config/opencode/opencode.json`
 - Restart OpenCode
+
+**Copilot CLI hooks not firing**
+- Run `:CodePreviewInstallCopilotCliHooks` in the project root
+- Verify `.github/hooks/code-preview.json` exists
+- Ensure `jq` is in PATH
+- Restart Copilot CLI (hooks are loaded at session start)
 
 **Diff doesn't close after rejecting**
 - Press `<leader>dq` or run `:CodePreviewCloseDiff` — the post hook only fires on accept

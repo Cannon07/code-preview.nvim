@@ -116,6 +116,37 @@ test_patch_add_file() {
   assert_contains "$prop_content" "return M" "proposed should have second line" || return 1
 }
 
+# ── Test: Add new file (GPT shape — no @@ marker) ────────────────
+
+# GPT's apply_patch format emits `*** Add File:` with content lines directly
+# following, no `@@` hunk header. Parser must lazy-create a hunk for these
+# lines; regression target for the original empty-diff-on-create bug.
+test_patch_add_file_no_hunk_marker() {
+  local patch
+  patch=$(printf '%s\n' \
+    "*** Begin Patch" \
+    "*** Add File: src/gpt_style.lua" \
+    "+local M = {}" \
+    "+return M" \
+    "*** End Patch")
+
+  local outdir
+  outdir="$(run_apply_patch "$patch")"
+
+  assert_file_exists "$outdir/files.json" "files.json should exist" || return 1
+
+  local action
+  action=$(jq -r '.[0].action' "$outdir/files.json")
+  assert_eq "add" "$action" "action should be 'add'" || return 1
+
+  local prop_file
+  prop_file=$(jq -r '.[0].prop' "$outdir/files.json")
+  local prop_content
+  prop_content="$(cat "$prop_file")"
+  assert_contains "$prop_content" "local M = {}" "no-@@ proposed should capture first line" || return 1
+  assert_contains "$prop_content" "return M"    "no-@@ proposed should capture second line" || return 1
+}
+
 # ── Test: Delete file ────────────────────────────────────────────
 
 test_patch_delete_file() {
@@ -242,6 +273,7 @@ line 6" >/dev/null
 
 run_test "apply-patch.lua parses Update File correctly" test_patch_update_file
 run_test "apply-patch.lua parses Add File correctly" test_patch_add_file
+run_test "apply-patch.lua parses Add File without @@ (GPT shape)" test_patch_add_file_no_hunk_marker
 run_test "apply-patch.lua parses Delete File correctly" test_patch_delete_file
 run_test "apply-patch.lua handles multi-file patches" test_patch_multi_file
 run_test "apply-patch.lua handles multiple hunks in same file" test_patch_multiple_hunks

@@ -102,6 +102,14 @@ function M.setup(user_config)
     require("code-preview.backends.opencode").uninstall()
   end, { desc = "Uninstall code-preview plugin from OpenCode" })
 
+  vim.api.nvim_create_user_command("CodePreviewInstallCopilotCliHooks", function()
+    require("code-preview.backends.copilot").install()
+  end, { desc = "Install code-preview hooks for GitHub Copilot CLI" })
+
+  vim.api.nvim_create_user_command("CodePreviewUninstallCopilotCliHooks", function()
+    require("code-preview.backends.copilot").uninstall()
+  end, { desc = "Uninstall code-preview hooks for GitHub Copilot CLI" })
+
   vim.api.nvim_create_user_command("CodePreviewCloseDiff", function()
     require("code-preview.diff").close_diff_and_clear()
   end, { desc = "Manually close code-preview diff (use after rejecting a change)" })
@@ -227,6 +235,17 @@ function M.status()
     table.insert(lines, "  OpenCode    : installed")
   else
     table.insert(lines, "  OpenCode    : not installed  ->  :CodePreviewInstallOpenCodeHooks")
+  end
+
+  -- Copilot CLI — check file contents, not just existence, so a user-authored
+  -- hook file that happens to share the name isn't reported as "installed".
+  local copilot_ok = require("code-preview.backends.copilot").is_our_config(
+    vim.fn.getcwd() .. "/.github/hooks/code-preview.json"
+  )
+  if copilot_ok then
+    table.insert(lines, "  Copilot CLI : installed")
+  else
+    table.insert(lines, "  Copilot CLI : not installed  ->  :CodePreviewInstallCopilotCliHooks")
   end
 
   vim.notify(table.concat(lines, "\n"), vim.log.levels.INFO, { title = "code-preview" })

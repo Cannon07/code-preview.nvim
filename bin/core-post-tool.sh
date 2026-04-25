@@ -9,7 +9,9 @@
 #     "tool_input": { "file_path": "...", ... } }
 #
 # Environment:
-#   CODE_PREVIEW_BACKEND  — "claudecode" or "opencode" (currently unused, reserved)
+#   CODE_PREVIEW_BACKEND  — "claudecode" | "opencode" | "copilot". Not read
+#                           by this script; kept set by adapters for symmetry
+#                           with core-pre-tool.sh, which does gate on it.
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
@@ -56,8 +58,8 @@ if [[ "$TOOL_NAME" == "ApplyPatch" ]]; then
         [[ "$fpath" == "/dev/null" ]] && continue
         echo "$fpath"
       done
-      echo "$1" | grep -E '^\*\*\* (Update|Add) File:' | while IFS= read -r line; do
-        echo "$line" | sed -E 's/^\*\*\* (Update|Add) File:[[:space:]]*//' | sed 's/[[:space:]]*$//'
+      echo "$1" | grep -E '^\*\*\* (Update|Add|Delete) File:' | while IFS= read -r line; do
+        echo "$line" | sed -E 's/^\*\*\* (Update|Add|Delete) File:[[:space:]]*//' | sed 's/[[:space:]]*$//'
       done
     }
 

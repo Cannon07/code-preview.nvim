@@ -76,8 +76,18 @@ for line in (patch_text .. "\n"):gmatch("([^\n]*)\n") do
     table.insert(current_file.hunks, current_file.current_hunk)
   elseif line == "*** End Patch" or line == "*** Begin Patch" then
     current_file = nil
-  elseif current_file and current_file.current_hunk then
-    table.insert(current_file.current_hunk.lines, line)
+  elseif current_file then
+    -- `*** Add File:` in the GPT patch format has no `@@` marker — content
+    -- lines follow directly. Lazy-create a hunk on the first content line
+    -- so those lines aren't dropped, without leaving an empty leading hunk
+    -- when `@@` *is* present.
+    if not current_file.current_hunk and current_action == "add" then
+      current_file.current_hunk = { lines = {} }
+      table.insert(current_file.hunks, current_file.current_hunk)
+    end
+    if current_file.current_hunk then
+      table.insert(current_file.current_hunk.lines, line)
+    end
   end
 end
 

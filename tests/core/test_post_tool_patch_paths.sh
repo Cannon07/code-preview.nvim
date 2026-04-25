@@ -29,8 +29,11 @@ reset_stub() {
   nvim_exec "_G.__closed_paths = {}"
 }
 
-closed_paths_json() {
-  nvim_eval "vim.json.encode(_G.__closed_paths or {})"
+# Pipe-joined string of paths. Avoids vim.json.encode, whose forward-slash
+# escaping behavior varies across Neovim builds and breaks substring matching
+# on paths like "src/new.lua".
+closed_paths() {
+  nvim_eval "table.concat(_G.__closed_paths or {}, '|')"
 }
 
 # Feed a normalized ApplyPatch JSON payload to core-post-tool.sh
@@ -63,7 +66,7 @@ test_delete_file_closes_diff() {
   run_post_apply_patch "$patch"
 
   local closed
-  closed="$(closed_paths_json)"
+  closed="$(closed_paths)"
   assert_contains "$closed" "to_remove.txt" "Delete File path should be passed to close_for_file" || return 1
 }
 
@@ -91,7 +94,7 @@ test_mixed_patch_closes_all_diffs() {
   run_post_apply_patch "$patch"
 
   local closed
-  closed="$(closed_paths_json)"
+  closed="$(closed_paths)"
   assert_contains "$closed" "README.md"     "Update File path should be closed" || return 1
   assert_contains "$closed" "src/new.lua"   "Add File path should be closed" || return 1
   assert_contains "$closed" "old.txt"       "Delete File path should be closed" || return 1
@@ -121,7 +124,7 @@ test_update_only_closes_diff() {
   run_post_apply_patch "$patch"
 
   local closed
-  closed="$(closed_paths_json)"
+  closed="$(closed_paths)"
   assert_contains "$closed" "a.txt" "Update File path should be closed" || return 1
 }
 

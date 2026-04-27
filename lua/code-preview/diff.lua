@@ -345,25 +345,32 @@ local function show_inline_diff(original_path, proposed_path, real_file_path, cf
     end
   end
 
-  vim.keymap.set("n", "]c", function()
-    local cur = vim.api.nvim_win_get_cursor(0)[1]
-    for lnum = cur + 1, vim.api.nvim_buf_line_count(buf) do
-      if line_types[lnum] then
-        vim.api.nvim_win_set_cursor(0, { lnum, 0 })
-        return
-      end
+  local keys_cfg = (cfg and cfg.keys) or {}
+  if keys_cfg ~= false then
+    if keys_cfg.next_change then
+      vim.keymap.set("n", keys_cfg.next_change, function()
+        local cur = vim.api.nvim_win_get_cursor(0)[1]
+        for lnum = cur + 1, vim.api.nvim_buf_line_count(buf) do
+          if line_types[lnum] then
+            vim.api.nvim_win_set_cursor(0, { lnum, 0 })
+            return
+          end
+        end
+      end, { buffer = buf, desc = "Next change" })
     end
-  end, { buffer = buf, desc = "Next change" })
 
-  vim.keymap.set("n", "[c", function()
-    local cur = vim.api.nvim_win_get_cursor(0)[1]
-    for lnum = cur - 1, 1, -1 do
-      if line_types[lnum] then
-        vim.api.nvim_win_set_cursor(0, { lnum, 0 })
-        return
-      end
+    if keys_cfg.prev_change then
+      vim.keymap.set("n", keys_cfg.prev_change, function()
+        local cur = vim.api.nvim_win_get_cursor(0)[1]
+        for lnum = cur - 1, 1, -1 do
+          if line_types[lnum] then
+            vim.api.nvim_win_set_cursor(0, { lnum, 0 })
+            return
+          end
+        end
+      end, { buffer = buf, desc = "Previous change" })
     end
-  end, { buffer = buf, desc = "Previous change" })
+  end
 
   if first_change_line then
     vim.api.nvim_win_set_cursor(win, { first_change_line, 0 })

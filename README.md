@@ -31,6 +31,7 @@ Supports [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [OpenCod
 - [How it works](#how-it-works)
 - [Configuration](#configuration)
 - [Commands](#commands)
+- [Keymaps](#keymaps)
 - [Diff Layouts](#diff-layouts)
 - [Neo-tree Integration](#neo-tree-integration-optional)
 - [Testing](#testing)

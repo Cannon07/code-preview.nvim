@@ -217,9 +217,29 @@ require("code-preview").setup({
 
 ## Keymaps
 
-| Key | Description |
-|-----|-------------|
-| `<leader>dq` | Close the diff (same as `:CodePreviewCloseDiff`) |
+| Key | Scope | Description |
+|-----|-------|-------------|
+| `<leader>dq` | global | Close the diff (same as `:CodePreviewCloseDiff`) |
+| `]c` | inline diff buffer | Jump to next change |
+| `[c` | inline diff buffer | Jump to previous change |
+
+All defaults are configurable via `setup()`:
+
+```lua
+require("code-preview").setup({
+  keys = {
+    next_change = "]c",          -- inline diff: next change
+    prev_change = "[c",          -- inline diff: previous change
+    close_all   = "<leader>dq",  -- close diff and clear indicators
+  },
+})
+```
+
+Set any entry to `false` to skip that binding, or `keys = false` to skip them all. A `<Plug>(CodePreviewCloseAll)` mapping is always defined, so you can bind it yourself even with `keys = false`:
+
+```lua
+vim.keymap.set("n", "<leader>x", "<Plug>(CodePreviewCloseAll)")
+```
 
 ---
 

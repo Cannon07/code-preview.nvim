@@ -33,6 +33,13 @@ local default_config = {
       deleted  = { fg = "#e06c75", bold = true, strikethrough = true },
     },
   },
+  keys = {
+    -- Set any entry to false to skip that binding. Set `keys = false` to skip all.
+    -- <Plug>(CodePreviewCloseAll) is always defined so users can map it themselves.
+    next_change = "]c",        -- buffer-local in inline diff buffers
+    prev_change = "[c",        -- buffer-local in inline diff buffers
+    close_all   = "<leader>dq", -- global; close diff and clear indicators
+  },
   highlights = {
     current = {
       DiffAdd    = { bg = "#4c2e2e" },
@@ -140,9 +147,19 @@ function M.setup(user_config)
     require("code-preview.neo_tree").setup(M.config)
   end
 
-  vim.keymap.set("n", "<leader>dq", function()
+  -- <Plug> mapping is always defined so users can bind it themselves
+  -- regardless of the `keys` config (e.g. `keys = false` to disable defaults).
+  vim.keymap.set("n", "<Plug>(CodePreviewCloseAll)", function()
     require("code-preview.diff").close_diff_and_clear()
   end, { desc = "Close code-preview diff" })
+
+  if M.config.keys ~= false then
+    local close_all = M.config.keys and M.config.keys.close_all
+    if close_all then
+      vim.keymap.set("n", close_all, "<Plug>(CodePreviewCloseAll)",
+        { desc = "Close code-preview diff" })
+    end
+  end
 end
 
 --- Query hook context for the PreToolUse shell script.

@@ -164,6 +164,43 @@ function M.check()
   else
     warn("Copilot CLI hooks not installed — run :CodePreviewInstallCopilotCliHooks")
   end
+
+  -- ── Codex CLI backend ─────────────────────────────────────────
+
+  start("OpenAI Codex CLI backend")
+
+  if vim.fn.executable("codex") == 1 then
+    ok("codex CLI is available in PATH")
+  else
+    warn("codex not found in PATH (install from https://github.com/openai/codex)")
+  end
+
+  local codex_dir = plugin_root .. "/backends/codex"
+  for _, script in ipairs({ "code-preview-diff.sh", "code-close-diff.sh" }) do
+    local path = codex_dir .. "/" .. script
+    if vim.fn.filereadable(path) == 1 and vim.fn.executable(path) == 1 then
+      ok(script .. " is executable")
+    elseif vim.fn.filereadable(path) == 1 then
+      warn(script .. " exists but is not executable (run: chmod +x " .. path .. ")")
+    else
+      error(script .. " not found at " .. path)
+    end
+  end
+
+  local codex_backend = require("code-preview.backends.codex")
+  if codex_backend.is_installed() then
+    ok("Codex CLI hooks are installed (.codex/hooks.json)")
+    local flag = codex_backend.feature_flag_state()
+    if flag == "enabled" then
+      ok(".codex/config.toml has codex_hooks = true")
+    elseif flag == "disabled" then
+      warn(".codex/config.toml is missing `codex_hooks = true` under [features] — hooks will not fire")
+    else
+      warn(".codex/config.toml not found — create it with `[features]\\ncodex_hooks = true`")
+    end
+  else
+    warn("Codex CLI hooks not installed — run :CodePreviewInstallCodexCliHooks")
+  end
 end
 
 return M

@@ -37,9 +37,12 @@ fi
 
 log_post "tool=$TOOL_NAME"
 
-# For Bash tool (rm detection), only clear deletion markers — don't touch edit markers or diff tab
+# For Bash tool, clear markers set by pre-hook detection (rm + shell writes).
+# We use a distinct `bash_modified` status for shell writes so this clear
+# doesn't clobber `modified` markers from concurrent Edit/Write/ApplyPatch
+# operations whose post-hook hasn't fired yet.
 if [[ "$TOOL_NAME" == "Bash" ]]; then
-  nvim_send "require('code-preview.changes').clear_by_status('deleted')" || true
+  nvim_send "require('code-preview.changes').clear_by_statuses({'deleted','bash_modified','bash_created'})" || true
   nvim_send "vim.defer_fn(function() pcall(function() require('code-preview.neo_tree').refresh() end) end, 200)" || true
   exit 0
 fi

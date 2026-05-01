@@ -117,6 +117,14 @@ function M.setup(user_config)
     require("code-preview.backends.copilot").uninstall()
   end, { desc = "Uninstall code-preview hooks for GitHub Copilot CLI" })
 
+  vim.api.nvim_create_user_command("CodePreviewInstallCodexCliHooks", function()
+    require("code-preview.backends.codex").install()
+  end, { desc = "Install code-preview hooks for OpenAI Codex CLI" })
+
+  vim.api.nvim_create_user_command("CodePreviewUninstallCodexCliHooks", function()
+    require("code-preview.backends.codex").uninstall()
+  end, { desc = "Uninstall code-preview hooks for OpenAI Codex CLI" })
+
   vim.api.nvim_create_user_command("CodePreviewCloseDiff", function()
     require("code-preview.diff").close_diff_and_clear()
   end, { desc = "Manually close code-preview diff (use after rejecting a change)" })
@@ -263,6 +271,23 @@ function M.status()
     table.insert(lines, "  Copilot CLI : installed")
   else
     table.insert(lines, "  Copilot CLI : not installed  ->  :CodePreviewInstallCopilotCliHooks")
+  end
+
+  -- Codex CLI — installation requires both our hooks.json entries AND the
+  -- `codex_hooks = true` feature flag in config.toml; report both so users
+  -- can debug a "hooks aren't firing" state without guessing.
+  local codex = require("code-preview.backends.codex")
+  if codex.is_installed() then
+    local flag = codex.feature_flag_state()
+    if flag == "enabled" then
+      table.insert(lines, "  Codex CLI   : installed (codex_hooks=true)")
+    elseif flag == "disabled" then
+      table.insert(lines, "  Codex CLI   : installed BUT codex_hooks flag missing in .codex/config.toml")
+    else
+      table.insert(lines, "  Codex CLI   : installed BUT .codex/config.toml not found (need codex_hooks=true)")
+    end
+  else
+    table.insert(lines, "  Codex CLI   : not installed  ->  :CodePreviewInstallCodexCliHooks")
   end
 
   vim.notify(table.concat(lines, "\n"), vim.log.levels.INFO, { title = "code-preview" })

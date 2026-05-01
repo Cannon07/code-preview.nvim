@@ -186,10 +186,14 @@ case "$TOOL_NAME" in
         | awk '{print $NF}' || true
     }
 
-    # Filters: skip transient file extensions and pseudo-paths.
+    # Filters: skip transient file extensions and pseudo-paths. We
+    # deliberately do NOT blanket-filter `/tmp/*` — on Linux `pwd -P`
+    # resolves to a real `/tmp/...` path, and we still want shell-write
+    # detection to mark targets there. Transience is signaled by the
+    # extension or by `/dev/*`, not by being under /tmp.
     is_transient_path() {
       case "$1" in
-        *.tmp|*.bak|*.swp|*~|/dev/*|/tmp/*) return 0 ;;
+        *.tmp|*.bak|*.swp|*~|/dev/*) return 0 ;;
       esac
       return 1
     }

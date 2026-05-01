@@ -140,14 +140,19 @@ require("code-preview").setup()
 1. Install the plugin and call `setup()`
 2. Open a project in Neovim
 3. Run `:CodePreviewInstallCodexCliHooks` — writes `.codex/hooks.json`
-4. Codex requires a feature flag to enable hooks. Create or edit `.codex/config.toml` (project-local) or `~/.codex/config.toml` (global) and add:
+4. Codex requires a feature flag to enable hooks, and the diff-preview workflow only makes sense when Codex asks before applying edits. Create or edit `.codex/config.toml` (project-local) or `~/.codex/config.toml` (global) and add:
 
    ```toml
+   approval_policy = "on-request"
+   sandbox_mode    = "read-only"
+
    [features]
    codex_hooks = true
    ```
 
-   The installer warns you if this flag is missing. You can also re-check at any time with `:CodePreviewStatus` or `:checkhealth code-preview`, which both report whether the feature flag is detected.
+   `approval_policy = "on-request"` and `sandbox_mode = "read-only"` ensure Codex prompts you before every edit, so the diff preview has time to open and you have time to review. Without them, Codex may apply changes without prompting and the preview window will never block on your decision.
+
+   The installer warns you if `codex_hooks` is missing. You can re-check at any time with `:CodePreviewStatus` or `:checkhealth code-preview`, which both report whether the feature flag is detected.
 5. Start Codex CLI in the project directory
 6. Ask Codex to edit a file — a diff opens automatically in Neovim
 7. Accept/reject in the CLI; the diff closes automatically on accept

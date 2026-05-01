@@ -72,9 +72,9 @@ local function wrap_name_component(state)
     if type(result) == "table" then
       local lookup = s.claude_status_lookup or {}
       local status = resolve_status(lookup, node.path)
-      if node._claude_virtual or status == "created" then
+      if node._claude_virtual or status == "created" or status == "bash_created" then
         result.highlight = "CodePreviewTreeVirtual"
-      elseif status == "modified" then
+      elseif status == "modified" or status == "bash_modified" then
         result.highlight = "CodePreviewTreeModified"
       elseif status == "deleted" then
         result.highlight = "CodePreviewTreeDeleted"
@@ -116,6 +116,12 @@ local function inject_renderer(state, node_type)
 end
 
 -- Inject the claude_status icon component
+--
+-- v1 simplification: bash_created shares styling with created, and
+-- bash_modified shares styling with modified. Users can't visually
+-- distinguish a shell-write from an editor write. If backends start
+-- routing most edits through Bash (Codex), we may want a distinct icon
+-- and highlight for shell-driven changes. Tracked as future work.
 local function inject_status_component(state, symbols)
   if state.components.claude_status then
     return
@@ -123,12 +129,12 @@ local function inject_status_component(state, symbols)
   state.components.claude_status = function(config, node, s)
     local lookup = s.claude_status_lookup or {}
     local status = resolve_status(lookup, node.path)
-    if node._claude_virtual or status == "created" then
+    if node._claude_virtual or status == "created" or status == "bash_created" then
       return {
         text = (symbols.created or "") .. " ",
         highlight = "CodePreviewTreeCreated",
       }
-    elseif status == "modified" then
+    elseif status == "modified" or status == "bash_modified" then
       return {
         text = (symbols.modified or "󰏫") .. " ",
         highlight = "CodePreviewTreeModified",
@@ -147,7 +153,8 @@ end
 local function cleanup_stale_virtual_nodes(state, pending)
   local stale = {}
   for path, _ in pairs(virtual_nodes) do
-    if pending[path] ~= "created" then
+    local s = pending[path]
+    if s ~= "created" and s ~= "bash_created" then
       table.insert(stale, path)
     end
   end
@@ -167,7 +174,7 @@ local function inject_virtual_nodes(state, pending)
   local changed = false
 
   for filepath, status in pairs(pending) do
-    if status ~= "created" then
+    if status ~= "created" and status ~= "bash_created" then
       goto continue
     end
 

@@ -28,12 +28,23 @@ local function apply_highlights(config)
 end
 
 -- Update neo-tree indicator + reveal for a file that's about to be previewed.
-local function mark_change_and_reveal(abs_file_path)
+-- `action` is an optional hint from callers that know the operation type
+-- (e.g. ApplyPatch passes "delete" for `*** Delete File:` directives). We
+-- only emit "deleted" when explicitly told — inferring it from an empty
+-- proposed file would misclassify legitimate truncations to zero bytes.
+local function mark_change_and_reveal(abs_file_path, action)
   if not abs_file_path or abs_file_path == "" then
     return
   end
 
-  local status = vim.loop.fs_stat(abs_file_path) and "modified" or "created"
+  local status
+  if action == "delete" then
+    status = "deleted"
+  elseif vim.uv.fs_stat(abs_file_path) then
+    status = "modified"
+  else
+    status = "created"
+  end
   log.debug(log.fmt("mark_change_and_reveal: %s → %s", abs_file_path, status))
   pcall(function() require("code-preview.changes").set(abs_file_path, status) end)
   pcall(function() require("code-preview.neo_tree").refresh() end)
@@ -379,7 +390,7 @@ local function show_inline_diff(original_path, proposed_path, real_file_path, cf
   return { tab = tab, bufs = { buf }, inline_win = win }
 end
 
-function M.show_diff(original_path, proposed_path, real_file_path, abs_file_path)
+function M.show_diff(original_path, proposed_path, real_file_path, abs_file_path, action)
   local file_key = abs_file_path or real_file_path
   local cfg = require("code-preview").config
   log.info(log.fmt("show_diff: file=%s layout=%s active=%d",
@@ -394,7 +405,7 @@ function M.show_diff(original_path, proposed_path, real_file_path, abs_file_path
   end
 
   -- Set the neo-tree indicator + reveal
-  mark_change_and_reveal(abs_file_path)
+  mark_change_and_reveal(abs_file_path, action)
 
   -- Inline layout
   if cfg.diff.layout == "inline" then

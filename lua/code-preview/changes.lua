@@ -38,4 +38,16 @@ function M.clear_by_status(status)
   end
 end
 
+function M.clear_by_statuses(statuses)
+  local set = {}
+  for _, s in ipairs(statuses) do
+    set[s] = true
+  end
+  for path, s in pairs(pending) do
+    if set[s] then
+      pending[path] = nil
+    end
+  end
+end
+
 return M

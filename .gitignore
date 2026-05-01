@@ -12,3 +12,6 @@
 
 # Test dependencies (plenary.nvim, installed by tests/run_lua.sh)
 deps/
+
+# Test output captured during local test runs
+test_output.log

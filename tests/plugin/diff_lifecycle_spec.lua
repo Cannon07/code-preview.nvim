@@ -156,6 +156,39 @@ describe("diff lifecycle", function()
     os.remove(prop)
   end)
 
+  it("show_diff with action=delete marks the file as deleted in the changes registry", function()
+    local orig = tmp_file("del_orig.txt", "to be removed\n")
+    local prop = tmp_file("del_prop.txt", "")
+
+    -- abs_file_path must point to a real on-disk file — `mark_change_and_reveal`
+    -- only honors the delete hint for files that currently exist.
+    local abs = tmp_file("del_abs.txt", "to be removed\n")
+
+    diff.show_diff(orig, prop, "deleted.txt", abs, "delete")
+    assert.equals("deleted", changes.get(abs))
+
+    diff.close_for_file(abs)
+    os.remove(orig)
+    os.remove(prop)
+    os.remove(abs)
+  end)
+
+  it("show_diff without action does NOT mark a truncation-to-empty as deleted", function()
+    -- Regression guard: a legitimate "edit file down to zero bytes" must
+    -- show as modified, not deleted.
+    local orig = tmp_file("trunc_orig.txt", "stub content\n")
+    local prop = tmp_file("trunc_prop.txt", "")
+    local abs = tmp_file("trunc_abs.txt", "stub content\n")
+
+    diff.show_diff(orig, prop, "trunc.txt", abs)
+    assert.equals("modified", changes.get(abs))
+
+    diff.close_for_file(abs)
+    os.remove(orig)
+    os.remove(prop)
+    os.remove(abs)
+  end)
+
   it("close_diff_and_clear closes all active diffs", function()
     local orig1 = tmp_file("drain_orig1.txt", "aaa")
     local prop1 = tmp_file("drain_prop1.txt", "bbb")

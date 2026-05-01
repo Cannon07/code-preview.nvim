@@ -132,12 +132,9 @@ case "$TOOL_NAME" in
     done < <(echo "$COMMAND" | sed 's/[;&|]\{1,2\}/\n/g')
 
     RM_PATHS="$(echo "$RM_PATHS" | xargs)"
-    if [[ -z "$RM_PATHS" ]]; then
-      exit 0  # Not an rm command, pass through
-    fi
 
-    # Mark each path as deleted in neo-tree
-    if [[ "$HAS_NVIM" == "true" ]]; then
+    # Mark each rm-detected path as deleted in neo-tree
+    if [[ -n "$RM_PATHS" && "$HAS_NVIM" == "true" ]]; then
       for path in $RM_PATHS; do
         PATH_ESC="$(escape_lua "$path")"
         nvim_send "require('code-preview.changes').set('$PATH_ESC', 'deleted')" || true
@@ -148,6 +145,135 @@ case "$TOOL_NAME" in
       FIRST_ESC="$(escape_lua "$FIRST_PATH")"
       nvim_send "vim.defer_fn(function() pcall(function() require('code-preview.neo_tree').reveal('$FIRST_ESC') end) end, 300)" || true
     fi
+
+    # ── Tier 1 shell-write detection ────────────────────────────────
+    # Extract file paths the command will write to via output redirection
+    # (`>`, `>>`), atomic-replace idiom (`mv X.tmp X`), or in-place tools
+    # (`tee`, `sed -i`, `awk -i inplace`). We only mark the targets in the
+    # changes registry — we do NOT compute or display a content diff for
+    # bash writes (that's Tier 2). Indicators are cleared on PostToolUse so
+    # they don't linger past the approval window.
+    detect_write_paths() {
+      local cmd="$1"
+      # Output redirection: capture the filename after `>`/`>>` (stdout) or
+      # `&>`/`&>>` (bash stdout+stderr). Excludes FD redirections like `2>&1`
+      # (handled by the digit-prefix guard) and `/dev/{null,stdout,stderr}`.
+      echo "$cmd" \
+        | grep -oE '(([^0-9&]|^)>>?|&>>?)[[:space:]]*[^[:space:]&;|<>()`{}]+' \
+        | sed -E 's/^[^>]*>+[[:space:]]*//' \
+        | grep -vE '^/dev/(null|stdout|stderr|tty)$' || true
+      # `mv SRC DST` and `cp SRC DST`: emit DST. We greedily grab the last
+      # whitespace-separated token; misses cases with quoted paths
+      # containing spaces, which is acceptable for Tier 1. Also note: the
+      # GNU `-t DST SRC...` flag inverts argument order — we'd emit a source
+      # file as the target. Not handled in Tier 1.
+      echo "$cmd" \
+        | tr ';&|' '\n' \
+        | grep -E '^[[:space:]]*(mv|cp)[[:space:]]' \
+        | sed -E 's/^[[:space:]]*(mv|cp)[[:space:]]+//' \
+        | awk '{print $NF}' || true
+      # `tee FILE` (with optional -a): emit FILE. Captures only the first
+      # target — `tee FILE OTHER_FILE` would miss OTHER_FILE. Acceptable
+      # for Tier 1.
+      echo "$cmd" \
+        | grep -oE 'tee[[:space:]]+(-a[[:space:]]+)?[^[:space:]&;|<>()`]+' \
+        | sed -E 's/^tee[[:space:]]+(-a[[:space:]]+)?//' || true
+      # `sed -i ... FILE` (BSD/GNU both supported; we don't try to skip the
+      # backup-suffix arg, so on BSD you'd see the suffix flagged too —
+      # acceptable for Tier 1).
+      echo "$cmd" \
+        | grep -oE 'sed[[:space:]]+(-[a-zA-Z]*i[a-zA-Z]*)[[:space:]]+([^|&;]+)' \
+        | awk '{print $NF}' || true
+    }
+
+    # Filters: skip transient file extensions and pseudo-paths. We
+    # deliberately do NOT blanket-filter `/tmp/*` — on Linux `pwd -P`
+    # resolves to a real `/tmp/...` path, and we still want shell-write
+    # detection to mark targets there. Transience is signaled by the
+    # extension or by `/dev/*`, not by being under /tmp.
+    is_transient_path() {
+      case "$1" in
+        *.tmp|*.bak|*.swp|*~|/dev/*) return 0 ;;
+      esac
+      return 1
+    }
+
+    # Drop strings that don't look like real filesystem paths. Catches false
+    # positives from the redirection regex matching inside quoted strings —
+    # e.g. `printf '<!-- note -->\n\n'` produces a spurious `\n\n'` capture
+    # because of the `-->` HTML comment marker.
+    looks_like_path() {
+      local p="$1"
+      # Must not contain a backslash (would imply a literal escape from
+      # inside a quoted string) or a stray single/double quote.
+      case "$p" in
+        *\\*|*\'*|*\"*) return 1 ;;
+      esac
+      # Must start with a path-safe character.
+      case "$p" in
+        /*|./*|../*|~/*|[A-Za-z0-9_]*) return 0 ;;
+      esac
+      return 1
+    }
+
+    WRITE_PATHS=""
+    while IFS= read -r raw; do
+      [[ -z "$raw" ]] && continue
+      # Strip surrounding quotes, if any.
+      raw="${raw#\"}"; raw="${raw%\"}"
+      raw="${raw#\'}"; raw="${raw%\'}"
+      # Reject obvious non-paths (escape sequences leaked from quoted strings).
+      if ! looks_like_path "$raw"; then continue; fi
+      # Expand a leading `~` to $HOME before the relative-path check —
+      # otherwise `~/foo` would get prefixed with $CWD and yield $CWD/~/foo.
+      # Quote `~` in the pattern (`'~/'`) so bash doesn't tilde-expand it
+      # before doing the prefix strip.
+      if [[ "$raw" == "~" ]]; then
+        raw="$HOME"
+      elif [[ "$raw" == "~/"* ]]; then
+        raw="$HOME/${raw#'~/'}"
+      fi
+      # Resolve relative paths against CWD.
+      if [[ "$raw" != /* ]]; then
+        raw="$CWD/$raw"
+      fi
+      if is_transient_path "$raw"; then continue; fi
+      # De-dup
+      case " $WRITE_PATHS " in
+        *" $raw "*) ;;
+        *) WRITE_PATHS="$WRITE_PATHS $raw" ;;
+      esac
+    done < <(detect_write_paths "$COMMAND")
+    WRITE_PATHS="$(echo "$WRITE_PATHS" | xargs)"
+
+    # Note: this branch always runs for Bash (no early-exit on read-only
+    # commands). The detector forks several subshells per invocation; if
+    # backends start chaining many small Bash calls we may want to short-
+    # circuit on commands that obviously can't write (e.g. leading `cat`,
+    # `ls`, `git status`) before running the regex pipeline.
+    if [[ -n "$WRITE_PATHS" && "$HAS_NVIM" == "true" ]]; then
+      log_pre "shell write candidates: $WRITE_PATHS"
+      for path in $WRITE_PATHS; do
+        # Distinguish created vs modified by checking current existence.
+        if [[ -e "$path" ]]; then
+          STATUS="bash_modified"
+        else
+          STATUS="bash_created"
+        fi
+        PATH_ESC="$(escape_lua "$path")"
+        nvim_send "require('code-preview.changes').set('$PATH_ESC', '$STATUS')" || true
+      done
+      nvim_send "pcall(function() require('code-preview.neo_tree').refresh() end)" || true
+      # Reveal precedence: rm wins. If the rm branch already queued a
+      # reveal, skip ours so we don't double-fire two defer_fn reveals on
+      # a command that both rm's and writes (e.g. `rm a && echo x > b`).
+      if [[ -z "$RM_PATHS" ]]; then
+        FIRST_PATH="$(echo "$WRITE_PATHS" | awk '{print $1}')"
+        FIRST_ESC="$(escape_lua "$FIRST_PATH")"
+        nvim_send "vim.defer_fn(function() pcall(function() require('code-preview.neo_tree').reveal('$FIRST_ESC') end) end, 300)" || true
+      fi
+    fi
+
     exit 0
     ;;
 
@@ -208,8 +334,9 @@ case "$TOOL_NAME" in
         fi
 
         if [[ "$SHOULD_SHOW" == "1" ]]; then
-          log_pre "ApplyPatch: sending diff for $REL_PATH to nvim"
-          nvim_send "require('code-preview.diff').show_diff('$orig_esc', '$prop_esc', '$display_esc', '$fpath_esc')" || true
+          log_pre "ApplyPatch: sending diff for $REL_PATH to nvim (action=$ACTION)"
+          action_esc="$(escape_lua "$ACTION")"
+          nvim_send "require('code-preview.diff').show_diff('$orig_esc', '$prop_esc', '$display_esc', '$fpath_esc', '$action_esc')" || true
         fi
       else
         log_pre "ApplyPatch: no nvim connection, skipping diff for $REL_PATH"

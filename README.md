@@ -17,6 +17,9 @@ Supports [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [OpenCod
 ### GitHub Copilot CLI
 ![GitHub Copilot CLI demo](docs/code-preview-copilot.gif)
 
+### OpenAI Codex CLI
+![OpenAI Codex CLI demo](docs/code-preview-codex.gif)
+
 ---
 
 ## Table of Contents

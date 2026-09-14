@@ -36,7 +36,9 @@ async function main(): Promise<void> {
   // (the bare `D:\…` path is rejected by the ESM loader as an unsupported scheme).
   const indexPath = resolve(__dirname, "../../../backends/opencode/index.ts")
   const mod = await import(pathToFileURL(indexPath).href)
-  const runWithSpuriousRetry = mod.runWithSpuriousRetry as RunWithSpuriousRetry
+  // Exposed as `retry.runWithSpuriousRetry` (a property on a const object, not a
+  // bare function export — see backends/opencode/index.ts).
+  const runWithSpuriousRetry = mod.retry.runWithSpuriousRetry as RunWithSpuriousRetry
 
   // Success on the first attempt → run called exactly once.
   {

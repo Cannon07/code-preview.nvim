@@ -79,10 +79,10 @@ const MAX_HOOK_ATTEMPTS = 3
 // its cached time — a synchronous retry would re-read the same stale value and
 // fail again (which is exactly why the *next* hook in a burst always succeeds).
 // A genuine timeout takes ~HOOK_TIMEOUT_MS, far above SPURIOUS_TIMEOUT_MS, so it
-// is never retried. `label` is used only for the diagnostic log. Exported so the
-// retry behaviour can be exercised by the test harness (it's a Windows libuv
-// quirk that can't otherwise be reproduced on CI).
-export async function runWithSpuriousRetry(
+// is never retried. `label` is used only for the diagnostic log. Exercised by
+// retry_test.ts (it's a Windows libuv quirk that can't otherwise be reproduced
+// on CI).
+async function runWithSpuriousRetry(
   run: () => void,
   label = "hook-entry",
 ): Promise<void> {
@@ -115,6 +115,12 @@ export async function runWithSpuriousRetry(
     }
   }
 }
+
+// Exposed as a property on a plain object — NOT as a function-valued export —
+// so retry_test.ts can still exercise it. opencode's plugin loader treats any
+// export whose value is a function as a plugin factory and crashes the server
+// at startup (opencode-ai 1.18.30, "plugin config hook failed (N.config)").
+export const retry = { runWithSpuriousRetry }
 
 async function runHook(event: "pre" | "post", payload: object): Promise<void> {
   const shim = resolveHookEntry()

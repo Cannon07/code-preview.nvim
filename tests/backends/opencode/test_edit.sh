@@ -202,13 +202,36 @@ test_opencode_multi_file() {
   assert_eq "0" "$changes_count" "changes should be cleared after full cycle" || return 1
 }
 
+test_opencode_patch() {
+  reset_test_state
+  local test_file
+  test_file="$(create_test_file "src/oc_patch.lua" 'local x = 1')"
+  local patch
+  patch="$(printf '%s\n' '*** Begin Patch' "*** Update File: $test_file" '@@' '-local x = 1' '+local x = 99' '*** End Patch')"
+
+  run_opencode patch_before "$TEST_SOCKET" "$TEST_PROJECT_DIR" "$patch" >/dev/null
+  assert_eq "true" "$(nvim_eval "require('code-preview.diff').is_open()")" "patch should open a preview" || return 1
+  assert_eq "modified" "$(nvim_eval "require('code-preview.changes').get('$test_file')")" "patch should mark the file" || return 1
+
+  run_opencode patch_after "$TEST_SOCKET" "$TEST_PROJECT_DIR" "$patch" >/dev/null
+  assert_eq "false" "$(nvim_eval "require('code-preview.diff').is_open()")" "patch should close its preview" || return 1
+  assert_eq "0" "$(nvim_eval "vim.tbl_count(require('code-preview.changes').get_all())")" "patch should clear changes" || return 1
+}
+
 # ── Run all tests ────────────────────────────────────────────────
 
-run_test "OpenCode edit before/after opens and closes diff" test_opencode_edit
-run_test "OpenCode write (new file) marks as created" test_opencode_write_new
-run_test "OpenCode bash rm marks as deleted" test_opencode_bash_rm
-run_test "OpenCode resolves relative file paths" test_opencode_relative_path
-run_test "OpenCode multi-file before→before→after→after" test_opencode_multi_file
+for api in v1 v2; do
+  export OPENCODE_TEST_API="$api"
+  run_test "OpenCode $api edit before/after opens and closes diff" test_opencode_edit
+  run_test "OpenCode $api write (new file) marks as created" test_opencode_write_new
+  run_test "OpenCode $api bash rm marks as deleted" test_opencode_bash_rm
+  run_test "OpenCode $api resolves relative file paths" test_opencode_relative_path
+  run_test "OpenCode $api multi-file proposal lifecycle" test_opencode_multi_file
+  run_test "OpenCode $api patch preview lifecycle" test_opencode_patch
+done
+OPENCODE_TEST_STATUS=error run_test "OpenCode v2 failed proposal closes preview" test_opencode_edit
+OPENCODE_TEST_STATUS=error run_test "OpenCode v2 rejected patch closes preview" test_opencode_patch
+unset OPENCODE_TEST_API
 
 # ── Teardown ─────────────────────────────────────────────────────
 

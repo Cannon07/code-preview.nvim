@@ -10,6 +10,7 @@
 // per-OS shim as the other agents rather than owning its own.
 
 import type { Plugin } from "@opencode-ai/plugin"
+import type { Plugin as V2Plugin } from "@opencode/plugin"
 import { execSync } from "child_process"
 import { existsSync, readFileSync } from "fs"
 import { resolve, dirname } from "path"
@@ -178,4 +179,31 @@ const plugin: Plugin = async ({ directory }) => {
   }
 }
 
-export default plugin
+// Type-only SDK imports keep the copied adapter free of runtime dependencies.
+// V1 (1.18.29+) calls server; V2 calls setup.
+export default {
+  id: "code-preview",
+  server: plugin,
+  async setup(ctx) {
+    for (const [hook, phase] of [
+      ["execute.before", "pre"],
+      ["execute.after", "post"],
+    ] as const) {
+      await ctx.tool.hook(hook, async (event) => {
+        // V2 renamed these tools; keep the shared Lua payload compatible.
+        const tool = event.tool === "patch" ? "apply_patch"
+          : event.tool === "shell" ? "bash" : event.tool
+        if (!PREVIEW_TOOLS.has(tool)) return
+        await enqueueHook(async () => {
+          // Use the session location rather than the plugin's load location.
+          const session = await ctx.session.get({ sessionID: event.sessionID })
+          await runHook(phase, {
+            tool,
+            args: event.input ?? {},
+            cwd: session.location.directory,
+          })
+        })
+      })
+    }
+  },
+} satisfies V2Plugin.Plugin & { server: Plugin }

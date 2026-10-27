@@ -31,10 +31,37 @@ async function main() {
 
   // Dynamic import of the plugin (it's the default export)
   const pluginModule = await import(resolve(__dirname, "../../../backends/opencode/index.ts"))
-  const pluginFactory = pluginModule.default
+  const plugin = pluginModule.default
 
-  // Initialize the plugin with the project directory
-  const hooks = await pluginFactory({ directory: projectDir })
+  const v2 = process.env.OPENCODE_TEST_API === "v2"
+  let hooks
+
+  if (v2) {
+    const registered: Record<string, (event: any) => Promise<void>> = {}
+    await plugin.setup({
+      location: { directory: "/not-the-session-directory" },
+      session: { get: async () => ({ location: { directory: projectDir } }) },
+      tool: {
+        hook: async (name: string, callback: (event: any) => Promise<void>) => {
+          registered[name] = callback
+          return { dispose: async () => {} }
+        },
+      },
+    } as any)
+    hooks = {
+      "tool.execute.before": async (input, output) => registered["execute.before"]({
+        tool: input.tool, input: output.args, sessionID: "session-test",
+      }),
+      "tool.execute.after": async (input, _output) => registered["execute.after"]({
+        tool: input.tool, input: input.args, sessionID: "session-test",
+        ...(process.env.OPENCODE_TEST_STATUS === "error"
+          ? { status: "error", error: { message: "rejected" } }
+          : { status: "completed", result: { content: "done" } }),
+      }),
+    }
+  } else {
+    hooks = await plugin.server({ directory: projectDir } as any)
+  }
 
   const beforeHook = hooks["tool.execute.before"]
   const afterHook = hooks["tool.execute.after"]
@@ -86,7 +113,7 @@ async function main() {
     case "bash_before": {
       const command = process.argv[5]
       await beforeHook(
-        { tool: "bash" },
+        { tool: v2 ? "shell" : "bash" },
         { args: { command } },
       )
       console.log("OK")
@@ -101,9 +128,19 @@ async function main() {
       // command's markers (issue #83).
       const command = process.argv[5]
       await afterHook(
-        { tool: "bash", args: { command } },
+        { tool: v2 ? "shell" : "bash", args: { command } },
         {},
       )
+      console.log("OK")
+      break
+    }
+
+    case "patch_before":
+    case "patch_after": {
+      const tool = v2 ? "patch" : "apply_patch"
+      const args = { patchText: process.argv[5] }
+      if (action === "patch_before") await beforeHook({ tool }, { args })
+      else await afterHook({ tool, args }, {})
       console.log("OK")
       break
     }

@@ -86,7 +86,7 @@ require("code-preview").setup()
 | Agent | Needs |
 |-------|-------|
 | **Claude Code** | [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) (with hooks) · [jq](https://jqlang.github.io/jq/) |
-| **OpenCode** | [OpenCode](https://opencode.ai) (a version with plugin support) |
+| **OpenCode** | [OpenCode](https://opencode.ai) V1 >= 1.18.29 or V2 |
 | **GitHub Copilot CLI** | [Copilot CLI](https://github.com/github/copilot-cli) (GA since Feb 2026) |
 | **OpenAI Codex CLI** | [Codex CLI](https://github.com/openai/codex) recent enough for `apply_patch` PreToolUse hooks · [jq](https://jqlang.github.io/jq/) |
 
@@ -120,6 +120,15 @@ Then run the one install command for your agent (and apply any agent-specific co
 <summary><b>OpenCode</b></summary>
 
 `:CodePreviewInstallOpenCodeHooks` — copies the plugin to `.opencode/plugins/`.
+
+The adapter supports V1 (1.18.29+) and V2 through separate `server()` and
+`setup()` entrypoints. After updating code-preview, run the install command again
+in each project to refresh the copied adapter, then restart OpenCode.
+
+For V2's shared background service, run `opencode service restart` to reload
+the adapter. Restarting Neovim alone does not reload OpenCode's hooks. If you
+manage the adapter globally in `~/.config/opencode/plugins/`, update that copy
+and avoid installing a second project-local copy.
 
 Then enable permission prompts in `~/.config/opencode/opencode.json`:
 
